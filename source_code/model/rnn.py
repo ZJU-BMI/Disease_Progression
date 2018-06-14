@@ -1,24 +1,46 @@
 import tensorflow as tf
+from tensorflow.python.ops.rnn_cell_impl import LayerRNNCell
 
 
-class RnnCell(object):
-    def __init__(self, num_units, activation, cell_type):
-        pass
+class RecurrentNeuralNetwork(LayerRNNCell):
+    """
+    The implementation is based on official tensorflow source code (rnn_cell_impl.py)
+
+    RecurrentNeuralNetwork inherit LayerRNNCell while LayerRNNCell inherit RNNCell and RNNCell inherits Layer
 
 
-class RnnLayer(object):
+    RNNCell is the fundamental abstract class of rnn. It defines many abstract functions which need concrete
+    implementation in its children class
+    abstract functions contains output_size and state_size. meanwhile, the build function doesn't have function body
+
+    LayerRNNCell almost does nothing other than implements the __call__ function, which, make the instance of this
+    class callable
+
+
+    """
+    def __init__(self):
+        return 1
+
+    def build(self, _):
+        return 1
+
+    @property
+    def output_size(self):
+        return 1
+
+    @property
+    def state_size(self):
+        return 1
+
+    def call(self, inputs, **kwargs):
+        return 1
+
+
+class BidirectionalRnn(RecurrentNeuralNetwork):
     pass
 
 
-class Rnn(object):
-    pass
-
-
-class BidirectionalRnn(Rnn):
-    pass
-
-
-class RnnWithAttention(Rnn):
+class RnnWithAttention(RecurrentNeuralNetwork):
     pass
 
 
