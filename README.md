@@ -1,2 +1,3 @@
-# Disease_Progression
-Chronic disease progression research
+# Chronic Disease Progression Research
+## Introduction
+chronic disease, mainly include cardiovascular disease(CVD), 
