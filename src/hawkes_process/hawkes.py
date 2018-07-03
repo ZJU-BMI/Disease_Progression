@@ -60,14 +60,13 @@ class HawkesOrigin(object):
             self.count_of_each_slot = self.event_count_of_each_slot()
             self.count_of_each_event = self.event_count_of_each_event()
             self.y_omega = self.y_omega_calculate()
-            # TODO
-            self.k_omega = None
+            self.k_omega = self.k_omega_update()
 
     # initialization parameter
     def initialize_base_intensity(self):
         base_intensity = None
         if self.init_strategy == 'default':
-            base_intensity = np.random.uniform(0, 0.1, [self.event_count, 1])
+            base_intensity = np.zeros([self.event_count, 1])
         else:
             pass
 
@@ -78,7 +77,7 @@ class HawkesOrigin(object):
     def initialize_mutual_intensity(self):
         mutual_excite_intensity = None
         if self.init_strategy == 'default':
-            mutual_excite_intensity = np.random.uniform(0, 0.1, (self.event_count, self.event_count))
+            mutual_excite_intensity = np.zeros([self.event_count, self.event_count])
         else:
             pass
 
@@ -151,7 +150,30 @@ class HawkesOrigin(object):
 
     # optimization
     def optimization(self, iteration):
-        pass
+
+        # initialize likelihood
+        train_log_likelihood = self.log_likelihood_calculate(self.training_data)
+        test_log_likelihood = self.log_likelihood_calculate(self.test_data)
+        self.train_log_likelihood_tendency.append(train_log_likelihood)
+        self.test_log_likelihood_tendency.append(test_log_likelihood)
+        print(self.excite_kernel + "_" + 'iteration: ' + str(0) + ',test likelihood = ' + str(test_log_likelihood) +
+              ',train likelihood = ' + str(train_log_likelihood))
+
+        for i in range(1, iteration + 1):
+            # EM Algorithm
+            if self.excite_kernel == 'fourier' or self.excite_kernel == 'Fourier':
+                self.k_omega_update()
+            self.expectation_step()
+            self.maximization_step()
+
+            train_log_likelihood = self.log_likelihood_calculate(self.training_data)
+            test_log_likelihood = self.log_likelihood_calculate(self.test_data)
+            self.train_log_likelihood_tendency.append(train_log_likelihood)
+            self.test_log_likelihood_tendency.append(test_log_likelihood)
+            print(self.excite_kernel + "_" + 'iteration: ' + str(i) + ',test likelihood = ' +
+                  str(test_log_likelihood) + ',train likelihood = ' + str(train_log_likelihood))
+
+        print("optimization accomplished")
 
     # expectation step and corresponding function
     def expectation_step(self):
@@ -375,57 +397,18 @@ class HawkesOrigin(object):
             kernel_value = math.exp(-1*omega*(late_event_time-early_event_time))
             return kernel_value
         elif kernel_type == 'fourier' or kernel_type == 'Fourier':
-            y_omega = self.y_omega
-
-            # based on Eq.22, 23
-            k_omega = []
-            for k in range(0, self.time_slot + 1):
-                if k == 0:
-                    nominator = 0
-                    denominator = 0
-
-                    nominator += y_omega[k]
-                    for item in self.base_intensity:
-                        nominator -= 2 * math.pi * item
-
-                        # for j in self.training_data:
-                        for c in range(self.event_count):
-                            for c_c in range(self.event_count):
-                                denominator = 0
-                                # 此处event_sample_count_list使用有误，待修改
-                                # denominator += self.mutual_intensity[c][c_c] * \
-                                #                self.event_sample_count_list[j][c]
-                    k_omega.append(nominator / denominator)
-                else:
-                    nominator = y_omega[k]
-
-                    denominator = 0
-                    for j in self.training_data:
-                        for item in self.training_data[j]:
-                            event_index = item[0]
-                            event_time = item[1]
-                            for c in range(self.event_count):
-                                for c_c in range(self.event_count):
-                                    if event_index == c_c:
-                                        alpha = self.mutual_intensity[c][c_c]
-                                        omega = 2 * math.pi / self.time_slot * k
-                                        exp = cmath.exp(complex(0, 1) * event_time * omega * -1)
-                                        denominator += exp * alpha
-                    k_omega.append(nominator / denominator)
-
             # inverse fast fourier transform
             # based on Eq. 24
             kappa = 0
             for k in range(0, self.time_slot):
                 omega = 2 * math.pi / self.time_slot * k
-                kappa += k_omega[k] * cmath.exp(complex(0, 1) * omega * (late_event_time - early_event_time))
+                kappa += self.k_omega[k] * cmath.exp(complex(0, 1) * omega * (late_event_time - early_event_time))
             kappa = kappa/self.time_slot
             return abs(kappa)
         else:
             raise RuntimeError('illegal kernel name')
 
     def kernel_integral(self, upper_bound, lower_bound):
-        # 本函数存在错误，需要大修
         """
         calculate the integral of kernel function
         :param upper_bound:
@@ -440,53 +423,56 @@ class HawkesOrigin(object):
             if self.omega is None:
                 raise RuntimeError('illegal hyper_parameter, omega lost')
             omega = self.omega
-            kernel_integral = (math.exp(-1 * omega * lower_bound) - math.exp(-1 * omega * upper_bound)) / omega
-            return kernel_integral
+            integral = (math.exp(-1 * omega * lower_bound) - math.exp(-1 * omega * upper_bound)) / omega
+            return integral
         elif kernel_type == 'fourier' or kernel_type == 'Fourier':
-            y_omega = self.y_omega
-
-            # based on Eq.22, 23
-            k_omega = []
-            for k in range(0, self.time_slot):
-                if k == 0:
-                    nominator = 0
-                    denominator = 0
-
-                    nominator += y_omega[k]
-                    for item in self.base_intensity:
-                        nominator -= 2 * math.pi * item
-
-                    # for j in self.training_data:
-                    for c in range(self.event_count):
-                        for c_c in range(self.event_count):
-                            denominator += self.mutual_intensity[c][c_c] * self.count_of_each_event
-                    k_omega.append(nominator / denominator)
-                else:
-                    nominator = y_omega[k]
-
-                    denominator = 0
-                    for j in self.training_data:
-                        for item in self.training_data[j]:
-                            event_index = item[0]
-                            event_time = item[1]
-                            for c in range(self.event_count):
-                                for c_c in range(self.event_count):
-                                    if event_index == c_c:
-                                        alpha = self.mutual_intensity[c][c_c]
-                                        omega = 2 * math.pi / self.time_slot * k
-                                        exp = cmath.exp(complex(0, 1) * event_time * omega * -1)
-                                        denominator += exp * alpha
-                    k_omega.append(nominator / denominator)
-
             # based on Eq. 25
             integral = 0
             for k in range(0, self.time_slot):
                 omega = 2 * math.pi / self.time_slot * k
-                integral += k_omega[k]*complex(0, 1)/omega*(1-cmath.exp(complex(0, 1)*omega*(upper_bound-lower_bound)))
-            integral = integral/self.time_slot
+                integral += self.k_omega[k] * complex(0, 1) / omega * (1 - cmath.exp(complex(0, 1) * omega * (
+                        upper_bound - lower_bound)))
+            integral = integral / self.time_slot
             return abs(integral)
         else:
             raise RuntimeError('illegal kernel name')
+
+    def k_omega_update(self):
+        y_omega = self.y_omega
+
+        # based on Eq.22, 23
+        k_omega = []
+        for k in range(0, self.time_slot):
+            if k == 0:
+                nominator = 0
+                denominator = 0
+
+                nominator += y_omega[k]
+                for item in self.base_intensity:
+                    nominator -= 2 * math.pi * item
+
+                # for j in self.training_data:
+                for c in range(self.event_count):
+                    for c_c in range(self.event_count):
+                        denominator += self.mutual_intensity[c][c_c] * self.count_of_each_event[c_c]
+                k_omega.append(nominator / denominator)
+            else:
+                nominator = y_omega[k]
+
+                denominator = 0
+                for j in self.training_data:
+                    for item in self.training_data[j]:
+                        event_index = item[0]
+                        event_time = item[1]
+                        for c in range(self.event_count):
+                            for c_c in range(self.event_count):
+                                if event_index == c_c:
+                                    alpha = self.mutual_intensity[c][c_c]
+                                    omega = 2 * math.pi / self.time_slot * k
+                                    exp = cmath.exp(complex(0, 1) * event_time * omega * -1)
+                                    denominator += exp * alpha
+                k_omega.append(nominator / denominator)
+        return k_omega
 
     def output_result(self, file_path):
         train = 'train_log_likelihood.csv'
@@ -571,6 +557,7 @@ class Hawkes(HawkesOrigin):
             self.k_omega = self.k_omega_update()
         print("Hawkes Process Model Initialize Accomplished")
 
+    # update k_omega
     def k_omega_cache_calculate(self):
         cache = np.zeros([self.event_count, self.time_slot], dtype=np.complex64)
         omega = np.arange(0, 2 * np.pi, 2 * np.pi / self.time_slot)
@@ -581,22 +568,43 @@ class Hawkes(HawkesOrigin):
                 cache[event_index] += np.exp(-1 * complex(0, 1) * omega * event_time)
         return cache
 
+    def k_omega_update(self):
+        # calculate denominator
+        k_denominator = np.zeros([self.time_slot, 1], dtype=np.complex64)
+        for k in range(0, self.time_slot):
+            if k == 0:
+                k_denominator[k][0] = np.dot(self.mutual_intensity, self.count_of_each_event).sum()
+            else:
+                cache = self.k_omega_cache[:, k]
+                mutual = self.mutual_intensity
+                k_denominator[k][0] = np.dot(cache, mutual).sum()
+        k_nominator = np.zeros([self.time_slot, 1], dtype=np.complex64)
+        for k in range(0, self.time_slot):
+            if k == 0:
+                k_nominator[k][0] = self.y_omega[k][0] - np.pi * 2 * self.base_intensity.sum()
+            else:
+                k_nominator[k][0] = self.y_omega[k][0]
+
+        self.k_omega = k_nominator / k_denominator
+        return k_nominator / k_denominator
+
     def y_omega_calculate(self):
-        y_omega = []
-        for k in range(0, self.time_slot + 1):
+        y_omega = np.zeros([self.time_slot, 1])
+        for k in range(0, self.time_slot):
             omega_k = 2 * math.pi / self.time_slot * k
             y_omega_k = 0
             for i in range(0, self.time_slot):
-                y_omega_k += cmath.exp(-1 * omega_k * i * complex(0, 1)) * self.count_of_each_slot[i]
-            y_omega.append(y_omega_k)
+                y_omega_k += np.exp(-1 * omega_k * i * complex(0, 1)) * self.count_of_each_slot[i]
+            y_omega[k][0] = y_omega_k
         return y_omega
 
+    # parameter update function
     def alpha_nominator_update(self):
         alpha_matrix = np.zeros([self.event_count, self.event_count])
         data_source = self.training_data
         for j in data_source:
             list_length = len(data_source[j])
-            for i in range(0, list_length):
+            for i in range(1, list_length):
                 for k in range(0, i):
                     i_event_index = data_source[j][i][0]
                     k_event_index = data_source[j][k][0]
@@ -607,7 +615,8 @@ class Hawkes(HawkesOrigin):
         alpha_matrix = np.zeros([self.event_count, self.event_count])
         for j in self.training_data:
             event_list = self.training_data[j]
-            last_event_time = event_list[-1][1]
+            # for numerical stability, we add 1
+            last_event_time = event_list[-1][1] + 1
             for l in range(0, self.event_count):
                 for k in range(0, len(event_list)):
                     k_event_index = event_list[k][0]
@@ -634,6 +643,42 @@ class Hawkes(HawkesOrigin):
             denominator += last_time-first_time
         self.mu_denominator_vector = denominator
 
+    # update auxiliary variables
+    def calculate_q_il(self, j, i, _l):
+        """
+        according to eq. 10
+        :param j:
+        :param i:
+        :param _l: the underline is added to eliminate the ambiguous
+        :return:
+        """
+
+        event_list = self.training_data[j]
+        i_event_index = event_list[i][0]
+        i_event_time = event_list[i][1]
+        l_event_index = event_list[_l][0]
+        l_event_time = event_list[_l][1]
+        alpha = self.mutual_intensity[i_event_index][l_event_index]
+        kernel = self.kernel_calculate(early_event_time=l_event_time, late_event_time=i_event_time)
+
+        nominator = alpha * kernel
+        denominator = self.auxiliary_variable_denominator[j][i]
+        return nominator / denominator
+
+    def calculate_q_ii(self, j, i):
+        """
+        according to eq. 9
+        :param j:
+        :param i:
+        :return:
+        """
+        event_list = self.training_data[j]
+        i_event_index = event_list[i][0]
+        nominator = self.base_intensity[i_event_index][0]
+        denominator = self.auxiliary_variable_denominator[j][i]
+        q_ii = nominator / denominator
+        return q_ii
+
     def auxiliary_variable_denominator_update(self):
         denominator_map = {}
         for j in self.training_data:
@@ -656,40 +701,20 @@ class Hawkes(HawkesOrigin):
 
         self.auxiliary_variable_denominator = denominator_map
 
-    def k_omega_update(self):
-        # calculate denominator
-        k_denominator = np.zeros([self.time_slot, 1], dtype=np.complex64)
-        for k in range(0, self.time_slot):
-            if k == 0:
-                k_denominator[k][0] = np.dot(self.mutual_intensity, self.count_of_each_event).sum()
-            else:
-                cache = self.k_omega_cache[:, k]
-                mutual = self.mutual_intensity
-                k_denominator[k][0] = np.dot(cache, mutual).sum()
-        k_nominator = np.zeros([self.time_slot, 1], dtype=np.complex64)
-        for k in range(0, self.time_slot):
-            if k == 0:
-                k_nominator[k][0] = self.y_omega[k] - np.pi * 2 * self.base_intensity.sum()
-            else:
-                k_nominator[k][0] = self.y_omega[k]
-
-        self.k_omega = k_nominator / k_denominator
-        return k_nominator / k_denominator
-
+    # auxiliary functions
     def kernel_calculate(self, early_event_time, late_event_time):
         kernel_type = self.excite_kernel
         if kernel_type == 'default' or kernel_type == 'exp':
             if self.omega is None:
-                raise RuntimeError('illegal hyper_parameter, omega lost')
+                raise RuntimeError('omega lost')
             omega = self.omega
-            kernel_value = math.exp(-1 * omega * (late_event_time - early_event_time))
+            kernel_value = np.exp(-1 * omega * (late_event_time - early_event_time))
             return kernel_value
         elif kernel_type == 'fourier' or kernel_type == 'Fourier':
-            omega = np.exp(complex(0, 1) * (late_event_time - early_event_time) * np.arange(0, 2 * np.pi,
-                                                                                            2 * np.pi / self.time_slot))
-            kappa = (omega * self.k_omega).sum()
-            kappa = abs(kappa)
-            return kappa
+            exp = np.exp(complex(0, 1) * (late_event_time - early_event_time) * np.arange(0, 2 * np.pi,
+                                                                                          2 * np.pi / self.time_slot))
+            kappa = (exp * self.k_omega).sum()
+            return abs(kappa)
         else:
             raise RuntimeError('illegal kernel name')
 
@@ -702,60 +727,25 @@ class Hawkes(HawkesOrigin):
             if self.omega is None:
                 raise RuntimeError('illegal hyper_parameter, omega lost')
             omega = self.omega
-            kernel_integral = (math.exp(-1 * omega * lower_bound) - math.exp(-1 * omega * upper_bound)) / omega
+            kernel_integral = (np.exp(-1 * omega * lower_bound) - math.exp(-1 * omega * upper_bound)) / omega
             return kernel_integral
         elif kernel_type == 'fourier' or kernel_type == 'Fourier':
-            omega = np.arange(0, 2 * np.pi, 2 * np.pi / self.time_slot)
-            # 防止除0
-            omega[0] = 2 * np.pi / self.time_slot
-            first = self.k_omega
+            # the calculate equations are different when k=0
+
+            # for k>0
+            omega = np.arange(2 * np.pi / self.time_slot, 2 * np.pi, 2 * np.pi / self.time_slot)
+            first = self.k_omega[1:, ]
             middle = complex(0, 1) / omega
             last = 1 - np.exp(complex(0, 1) * omega * (upper_bound - lower_bound))
-            kernel_integral = (first * middle * last).sum() / self.time_slot
-            kernel_integral = abs(kernel_integral)
-            return kernel_integral
+            kernel_integral = (first * middle * last).sum()
+
+            # for k=0
+            kernel_integral += self.k_omega[0][0] * (upper_bound - lower_bound)
+            return abs(kernel_integral / self.time_slot)
         else:
             raise RuntimeError('illegal kernel name')
 
-    def calculate_q_ii(self, j, i):
-        """
-        according to eq. 9
-        :param j:
-        :param i:
-        :return:
-        """
-        event_list = self.training_data[j]
-        i_event_index = event_list[i][0]
-        nominator = self.base_intensity[i_event_index][0]
-        denominator = self.auxiliary_variable_denominator[j][i]
-        q_ii = nominator/denominator
-        return q_ii
-
-    def calculate_q_il(self, j, i, _l):
-        """
-        according to eq. 10
-        :param j:
-        :param i:
-        :param _l: the underline is added to eliminate the ambiguous
-        :return:
-        """
-
-        event_list = self.training_data[j]
-        i_event_index = event_list[i][0]
-        i_event_time = event_list[i][1]
-        l_event_index = event_list[_l][0]
-        l_event_time = event_list[_l][1]
-        alpha = self.mutual_intensity[i_event_index][l_event_index]
-        kernel = self.kernel_calculate(early_event_time=l_event_time, late_event_time=i_event_time)
-
-        nominator = alpha*kernel
-        denominator = self.auxiliary_variable_denominator[j][i]
-        return nominator/denominator
-
     def maximization_step(self):
-        """
-        :return:
-        """
         self.alpha_nominator_update()
         self.alpha_denominator_update()
         self.mu_nominator_update()
@@ -764,7 +754,6 @@ class Hawkes(HawkesOrigin):
         self.base_intensity = self.mu_nominator_vector / self.mu_denominator_vector
 
     def expectation_step(self):
-        # Update denominator of auxiliary variable
         self.auxiliary_variable_denominator_update()
         for j in self.training_data:
             list_length = len(self.training_data[j])
@@ -772,31 +761,6 @@ class Hawkes(HawkesOrigin):
                 for l in range(0, i):
                     self.auxiliary_variable[j][i][l] = self.calculate_q_il(j=j, i=i, _l=l)
                 self.auxiliary_variable[j][i][i] = self.calculate_q_ii(j=j, i=i)
-
-    def optimization(self, iteration):
-
-        train_log_likelihood = self.log_likelihood_calculate(self.training_data)
-        test_log_likelihood = self.log_likelihood_calculate(self.test_data)
-        self.train_log_likelihood_tendency.append(train_log_likelihood)
-        self.test_log_likelihood_tendency.append(test_log_likelihood)
-        print(self.excite_kernel + "_" + 'iteration: ' + str(0) + ',test likelihood = ' + str(test_log_likelihood) +
-              ',train likelihood = ' + str(train_log_likelihood))
-
-        for i in range(1, iteration + 1):
-            # EM Algorithm
-            if self.excite_kernel == 'fourier' or self.excite_kernel == 'Fourier':
-                self.k_omega_update()
-            self.expectation_step()
-            self.maximization_step()
-
-            train_log_likelihood = self.log_likelihood_calculate(self.training_data)
-            test_log_likelihood = self.log_likelihood_calculate(self.test_data)
-            self.train_log_likelihood_tendency.append(train_log_likelihood)
-            self.test_log_likelihood_tendency.append(test_log_likelihood)
-            print(self.excite_kernel + "_" + 'iteration: ' + str(i) + ',test likelihood = ' +
-                  str(test_log_likelihood) + ',train likelihood = ' + str(train_log_likelihood))
-
-        print("optimization accomplished")
 
 
 def main():
