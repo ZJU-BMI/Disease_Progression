@@ -132,7 +132,7 @@ class HawkesOrigin(object):
         for item in event_list_full:
             slot_index = int((item[1] - self.initial_time) / time_unit)
             if slot_index == len(count_list):
-                count_list[slot_index-1] += 1
+                count_list[slot_index - 1] += 1
             else:
                 count_list[slot_index] += 1
         return count_list
@@ -207,7 +207,7 @@ class HawkesOrigin(object):
             alpha = self.mutual_intensity[i_event_index][l_event_index]
             kernel = self.kernel_calculate(early_event_time=l_event_time, late_event_time=i_event_time)
             denominator += alpha * kernel
-        q_ii = nominator/denominator
+        q_ii = nominator / denominator
         return q_ii
 
     def calculate_q_il(self, j, i, _l):
@@ -227,7 +227,7 @@ class HawkesOrigin(object):
         alpha = self.mutual_intensity[i_event_index][l_event_index]
         kernel = self.kernel_calculate(early_event_time=l_event_time, late_event_time=i_event_time)
 
-        nominator = alpha*kernel
+        nominator = alpha * kernel
 
         # calculate denominator
         denominator = 0
@@ -238,7 +238,7 @@ class HawkesOrigin(object):
             alpha = self.mutual_intensity[i_event_index][l_event_index]
             kernel = self.kernel_calculate(early_event_time=l_event_time, late_event_time=i_event_time)
             denominator += alpha * kernel
-        q_il = nominator/denominator
+        q_il = nominator / denominator
 
         return q_il
 
@@ -274,8 +274,8 @@ class HawkesOrigin(object):
         for j in self.training_data:
             first_event_time = self.training_data[j][0][1]
             last_event_time = self.training_data[j][-1][1]
-            denominator += last_event_time-first_event_time
-        mu = nominator/denominator
+            denominator += last_event_time - first_event_time
+        mu = nominator / denominator
         self.base_intensity[c][0] = mu
 
     def update_alpha(self, c, c_c):
@@ -306,9 +306,9 @@ class HawkesOrigin(object):
                     k_event_index = self.training_data[j][k][0]
                     k_event_time = self.training_data[j][k][1]
                     if c == l and c_c == k_event_index:
-                        denominator += self.kernel_integral(last_event_time-k_event_time, 0)
+                        denominator += self.kernel_integral(last_event_time - k_event_time, 0)
 
-        alpha = nominator/denominator
+        alpha = nominator / denominator
         self.mutual_intensity[c][c_c] = alpha
 
     # calculate log-likelihood
@@ -380,10 +380,10 @@ class HawkesOrigin(object):
             k_event_time = data_source[j][k][1]
 
             lower_bound = 0
-            upper_bound = last_event_time-k_event_time
+            upper_bound = last_event_time - k_event_time
             alpha = self.mutual_intensity[u][k_event_index]
 
-            part_two += alpha*self.kernel_integral(lower_bound=lower_bound, upper_bound=upper_bound)
+            part_two += alpha * self.kernel_integral(lower_bound=lower_bound, upper_bound=upper_bound)
 
         return part_two
 
@@ -394,7 +394,7 @@ class HawkesOrigin(object):
             if self.omega is None:
                 raise RuntimeError('illegal hyper_parameter, omega lost')
             omega = self.omega
-            kernel_value = math.exp(-1*omega*(late_event_time-early_event_time))
+            kernel_value = math.exp(-1 * omega * (late_event_time - early_event_time))
             return kernel_value
         elif kernel_type == 'fourier' or kernel_type == 'Fourier':
             # inverse fast fourier transform
@@ -403,7 +403,7 @@ class HawkesOrigin(object):
             for k in range(0, self.time_slot):
                 omega = 2 * math.pi / self.time_slot * k
                 kappa += self.k_omega[k] * cmath.exp(complex(0, 1) * omega * (late_event_time - early_event_time))
-            kappa = kappa/self.time_slot
+            kappa = kappa / self.time_slot
             return abs(kappa)
         else:
             raise RuntimeError('illegal kernel name')
@@ -640,7 +640,7 @@ class Hawkes(HawkesOrigin):
             event_list = self.training_data[j]
             first_time = event_list[0][1]
             last_time = event_list[-1][1]
-            denominator += last_time-first_time
+            denominator += last_time - first_time
         self.mu_denominator_vector = denominator
 
     # update auxiliary variables

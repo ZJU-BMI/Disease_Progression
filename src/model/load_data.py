@@ -1,6 +1,7 @@
-import numpy as np
 import csv
 from itertools import islice
+
+import numpy as np
 
 
 def load_data(file_path):

@@ -1,5 +1,5 @@
-from xml.etree import ElementTree
 import datetime
+from xml.etree import ElementTree
 
 
 def load_need_data_5_fold(xml_file_path, xml_file_name_list, diagnosis_reserve, operation_reserve):
@@ -254,8 +254,8 @@ def event_stat():
         for item in single_sequence_list:
             item_index = item[0]
             if not event_count.__contains__(item_index):
-
-    print(data_source)
+                event_count[item_index] += 1
+    print(event_count)
 
 
 if __name__ == "__main__":

@@ -1,8 +1,11 @@
 <component name="ProjectDictionaryState">
   <dictionary name="sunzhoujian">
     <words>
+      <w>backprop</w>
+      <w>dataset</w>
       <w>diag</w>
       <w>hawkes</w>
+      <w>logits</w>
       <w>oper</w>
       <w>tensorflow</w>
     </words>
