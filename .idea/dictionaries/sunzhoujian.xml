@@ -6,7 +6,11 @@
       <w>diag</w>
       <w>hawkes</w>
       <w>logits</w>
+      <w>lstm</w>
+      <w>minibatch</w>
+      <w>mnist</w>
       <w>oper</w>
+      <w>pred</w>
       <w>tensorflow</w>
     </words>
   </dictionary>

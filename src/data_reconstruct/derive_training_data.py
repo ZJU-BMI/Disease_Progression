@@ -244,7 +244,7 @@ def event_stat():
     # 每个病人的时间跨度
     # 平均每个病人的一个序列发生了多少事件
     sequence_list = {}
-    for i in data_sequence_list:
+    for i in range(0, len(data_sequence_list)):
         sequence_list.update(data_sequence_list[i])
 
     # 每种事件发生了多少次
