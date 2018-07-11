@@ -55,11 +55,11 @@ class ProposedModel(object):
 
             if cell_type == 'lstm' or cell_type == 'gru' or cell_type == 'basic':
                 if cell_type == 'lstm':
-                    cell = rnn.LSTMCell(self.num_hidden, forget_bias=1.0, name='lstm_cell')
+                    cell = rnn.LSTMCell(self.num_hidden, forget_bias=1.0, name='lstm')
                 elif cell_type == 'gru':
-                    cell = rnn.GRUCell(self.num_hidden, name='gru_cell')
+                    cell = rnn.GRUCell(self.num_hidden, name='gru')
                 else:
-                    cell = rnn.BasicRNNCell(self.num_hidden, name='basic_cell')
+                    cell = rnn.BasicRNNCell(self.num_hidden, name='basic')
             else:
                 raise Exception('cell type need to be "lstm", "gru", "basic"')
 
@@ -69,7 +69,8 @@ class ProposedModel(object):
             return states
 
     def __rnn_output(self, state):
-        with tf.variable_scope('rnn_output_parameter') as scope:
+
+        with tf.variable_scope('rnn_output_para') as scope:
             c_weight = tf.get_variable(name='classification_weight', shape=[self.num_hidden, self.num_classes],
                                        initializer=tf.random_normal_initializer())
             c_bias = tf.get_variable(name='classification_bias', shape=[self.num_classes],
@@ -78,7 +79,7 @@ class ProposedModel(object):
                                        initializer=tf.random_normal_initializer())
             r_bias = tf.get_variable(name='regression_bias', shape=[1, ],
                                      initializer=tf.zeros_initializer())
-        with tf.name_scope('rnn_output_sequence'):
+        with tf.name_scope('output_sequence'):
             state_list = tf.split(state, len(state), axis=0, name='rnn_output_split')
             classification_output_list = []
             regression_output_list = []
@@ -96,8 +97,16 @@ class ProposedModel(object):
 
     def model_construct(self):
         c_output_list, r_output_list = self.__rnn_output(self.__rnn_state(self.x, self.cell_type))
-        c_pred = tf.nn.softmax(c_output_list)
-        r_pred = r_output_list
+
+        with tf.name_scope('prediction'):
+            # softmax will normalize the value of entries in same vector
+            c_pred = tf.nn.softmax(c_output_list)
+            r_pred = r_output_list
+            correct_class_prediction = tf.equal(tf.argmax(c_pred, 1), tf.argmax(self.y, 1))
+            accuracy = tf.reduce_mean(tf.cast(correct_class_prediction, tf.float32))
+            absolute_error = tf.reduce_mean(tf.abs(r_pred - self.t))
+
+            # absolute_time_error = tf.
 
         # Define loss and optimizer
         with tf.name_scope('train'):
@@ -113,15 +122,13 @@ class ProposedModel(object):
             optimizer = tf.train.GradientDescentOptimizer(learning_rate=self.learning_rate, name='optimizer')
             train_op = optimizer.minimize(loss_op, name='train')
 
-        with tf.name_scope('prediction'):
-            correct_class_prediction = tf.equal(tf.argmax(c_pred, 1), tf.argmax(self.y, 1))
-            accuracy = tf.reduce_mean(tf.cast(correct_class_prediction, tf.float32))
-
-            # absolute_time_error = tf.
-
         with tf.name_scope('summary'):
             tf.summary.scalar('accuracy', accuracy)
-            tf.summary.scalar('loss_op', loss_op)
+            tf.summary.scalar('time_absolute_error', absolute_error)
+            tf.summary.scalar('loss_all', loss_op)
+            tf.summary.scalar('loss_classification', loss_c)
+            tf.summary.scalar('loss_regression', loss_r)
+            tf.summary.scalar('loss_regression', loss_r)
             merged = tf.summary.merge_all()
 
         init = tf.global_variables_initializer()
@@ -217,6 +224,12 @@ class TestData(object):
         self.test_time = test_time
 
 
+# 参考Tensorflow源代码
+class TeacherForcingCell(object):
+    def __init__(self, hidden_state, ):
+        pass
+
+
 def main():
     save_path = "D:\\PythonProject\\DiseaseProgression\\src\\model\\train"
     data_path = "/tmp/data/"
@@ -225,7 +238,7 @@ def main():
     c_r_ratio = 1
 
     data = TestData(data_path=data_path, time_steps=time_steps, num_input=num_input, test_len=128, batch_size=128)
-    model_config = ModelConfig(learning_rate=0.001, max_train_steps=2000, batch_size=128, rnn_num_input=num_input,
+    model_config = ModelConfig(learning_rate=0.001, max_train_steps=20, batch_size=128, rnn_num_input=num_input,
                                rnn_time_steps=28, rnn_num_hidden=time_steps, rnn_num_classes=10, cell_type='lstm',
                                save_path=save_path, c_r_ratio=c_r_ratio)
 
