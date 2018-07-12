@@ -3,7 +3,6 @@ from __future__ import print_function
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import rnn
-# Test Data
 from tensorflow.examples.tutorials.mnist import input_data
 
 
@@ -222,12 +221,6 @@ class TestData(object):
         self.test_data = test_data
         self.test_label = test_label
         self.test_time = test_time
-
-
-# 参考Tensorflow源代码
-class TeacherForcingCell(object):
-    def __init__(self, hidden_state, ):
-        pass
 
 
 def main():

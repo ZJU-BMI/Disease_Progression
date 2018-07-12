@@ -4,10 +4,12 @@
       <w>backprop</w>
       <w>dataset</w>
       <w>diag</w>
+      <w>dtype</w>
       <w>hawkes</w>
       <w>logits</w>
       <w>lstm</w>
       <w>minibatch</w>
+      <w>minist</w>
       <w>mnist</w>
       <w>oper</w>
       <w>pred</w>
