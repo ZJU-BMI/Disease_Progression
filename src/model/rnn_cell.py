@@ -1,73 +1,92 @@
 import tensorflow as tf
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import nn_ops
+from tensorflow.python.ops.rnn_cell_impl import LayerRNNCell
 
 
-class LSTMRevised1Cell(object):
+class RevisedGRUCell(LayerRNNCell):
     """
     compared to standard lstm, change W*[x, h_t-1] to W*[x, h_t-1, t] to import t
     using peephole connection to make full use of time information
+
+    we need to define all tensors' shape explicitly
     """
 
-    def __init__(self, input_size, hidden_states, name, initial_strategy_set, use_peephole=True,
-                 forget_bias=1.0):
+    def __init__(self, hidden_states, initial_strategy_set, reuse=None, name=None, activation=None):
         """
-        :param input_size: length of each input vector
         :param hidden_states: length of hidden state vector
         :param name: the name in name scope
         :param initial_strategy_set: a dict, contains all parameters initializer
-        :param use_peephole: using peephole connection or not, default true to make full use of time information
-        :param forget_bias: default 1.0
         """
-        self.legal_examine(input_size, hidden_states, name, initial_strategy_set, use_peephole, forget_bias)
-        with tf.name_scope(name=name):
-            with tf.variable_scope('revised lstm parameter'):
-                self._num_inputs = input_size
-                self._hidden_state = hidden_states
-                self._forget_bias = forget_bias
-                self._use_peephole = use_peephole
-                self._weight = tf.get_variable('weight', [input_size + hidden_states + 1, hidden_states * 4],
-                                               initializer=initial_strategy_set['weight'])
-                self._bias = tf.get_variable('bias', [hidden_states * 4], initializer=initial_strategy_set['bias'])
-
-                if use_peephole:
-                    self._w_i = tf.get_variable('wci', [hidden_states], initializer=initial_strategy_set['wci'])
-                    self._w_f = tf.get_variable('wcf', [hidden_states], initializer=initial_strategy_set['wcf'])
-                    self._w_o_diag = tf.get_variable('wco', [hidden_states], initializer=initial_strategy_set['wco'])
-                else:
-                    self._w_i = array_ops.zeros([hidden_states])
-                    self._w_f = array_ops.zeros([hidden_states])
-                    self._w_o = array_ops.zeros([hidden_states])
+        super(RevisedGRUCell, self).__init__(_reuse=reuse, name=name)
+        self.legal_examine(hidden_states, name, initial_strategy_set)
+        self._hidden_state = hidden_states
+        self._activation = activation
         self.initialized_flag = True
+        self._gate_weight = None
+        self._gate_bias = None
+        self._candidate_weight = None
+        self._candidate_bias = None
 
-    # todo, exam whether the input are legal
-    def legal_examine(self, input_size, hidden_states, name, initial_strategy_set, use_peephole, forget_bias):
-        # hidden_state, input_size should be the form of [batch_size, num]
-        pass
+        self.built = False
 
-    def init(self):
-        pass
+        self.legal_examine(hidden_states, name, initial_strategy_set)
 
-    def call(self, input_x, input_t, pre_h_state, pre_cell_state):
+    def build(self, inputs_shape):
+        x_shape, t_shape = inputs_shape
+
+        if x_shape[1].value is None:
+            raise ValueError("Expected x_shape[-1] to be known, saw shape: %s"
+                             % x_shape)
+        if t_shape[1].value is None:
+            raise ValueError("Expected t_shape[-1] to be known, saw shape: %s"
+                             % t_shape)
+
+        # define the parameter a GRU will use
+        with tf.name_scope('GRU_Cell'):
+            with tf.variable_scope('GRU_Cell_Para'):
+                self._gate_weight = tf.get_variable(name='gate_weight',
+                                                    shape=[self._hidden_state * 2],
+                                                    initializer=self.initial_strategy_set['gate_weight'])
+                self._gate_bias = tf.get_variable(name='gate_bias',
+                                                  shape=[self._hidden_state * 2],
+                                                  initializer=self.initial_strategy_set['gate_bias'])
+                self._candidate_weight = tf.get_variable(name='candidate_weight',
+                                                         shape=[self._hidden_state],
+                                                         initializer=self.initial_strategy_set['candidate_weight'])
+                self._candidate_bias = tf.get_variable(name='candidate_bias',
+                                                       shape=[self._hidden_state],
+                                                       initializer=self.initial_strategy_set['candidate_bias'])
+        self.built = True
+
+    def call(self, inputs, **kwargs):
         """
-        :param input_x:
-        :param input_t: vector match shape
-        :param pre_h_state:
-        :param pre_cell_state:
+        :param inputs: contain x_n, and t_n
+        :param kwargs need contains shape
         :return:
         """
-        w_i = self._w_i
-        w_f = self._w_f
-        w_o = self._w_o
-        forget_bias = self._forget_bias
+        state = kwargs['state']
+        x_input, t_input = inputs
 
-        # todo, 确认拼接是否正确
-        x_h = tf.concat([input_x, pre_h_state, input_t], axis=1)
-        kernel = tf.nn.sigmoid(tf.matmul(x_h, self._weight), name='get_new_state_info')
+        gate_value = math_ops.matmul(array_ops.concat([t_input], axis=1), self._gate_kernel)
+        gate_value = nn_ops.bias_add(gate_value, self._gate_bias)
+        gate_value = math_ops.sigmoid(gate_value)
 
-        # TODO 留待继续完成
+        r, u = array_ops.split(value=gate_value, num_or_size_splits=2, axis=1)
 
+        r_state = r * state
 
-class BlockLSTM2(object):
-    """
-    directly using time information to decide value of forget gate
-    """
+        candidate = math_ops.matmul(
+            array_ops.concat([inputs, r_state], 1), self._candidate_kernel)
+        candidate = nn_ops.bias_add(candidate, self._candidate_bias)
+
+        c = self._activation(candidate)
+        new_h = u * state + (1 - u) * c
+        return new_h, new_h
+
+    # todo, exam whether the input are legal
+    def legal_examine(self, hidden_states, name, initial_strategy_set):
+        # hidden_state, input_size should be the form of [batch_size, num]
+        # all parameter should be initialized by explicitly defined initializer
+        pass
