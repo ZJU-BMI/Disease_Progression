@@ -232,7 +232,7 @@ def main():
 
     data = TestData(data_path=data_path, time_steps=time_steps, num_input=num_input, test_len=128, batch_size=128)
     model_config = ModelConfig(learning_rate=0.001, max_train_steps=20, batch_size=128, rnn_num_input=num_input,
-                               rnn_time_steps=28, rnn_num_hidden=time_steps, rnn_num_classes=10, cell_type='lstm',
+                               rnn_time_steps=28, rnn_num_hidden=time_steps, rnn_num_classes=10, cell_type='gru',
                                save_path=save_path, c_r_ratio=c_r_ratio)
 
     model = ProposedModel(data=data, model_config=model_config)
