@@ -13,7 +13,9 @@
       <w>mnist</w>
       <w>oper</w>
       <w>pred</w>
+      <w>relu</w>
       <w>softmax</w>
+      <w>tanh</w>
       <w>tensorflow</w>
     </words>
   </dictionary>
