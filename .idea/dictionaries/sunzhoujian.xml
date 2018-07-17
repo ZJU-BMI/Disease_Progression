@@ -17,6 +17,7 @@
       <w>softmax</w>
       <w>tanh</w>
       <w>tensorflow</w>
+      <w>unnormalized</w>
       <w>varscope</w>
     </words>
   </dictionary>
