@@ -110,20 +110,30 @@ class AttentionBasedModel(object):
                 mix_state = tf.reduce_sum(state_list, axis=0)
                 output_mix_hidden_state.append(mix_state)
 
-        with tf.name_scope('prediction'):
+        with tf.name_scope('unnormal_pred'):
             c_pred_list = []
             r_pred_list = []
             for state in output_mix_hidden_state:
-                c_pred = tf.sigmoid(tf.matmul(state, self.c_weight) + self.c_bias)
+                c_pred = tf.matmul(state, self.c_weight) + self.c_bias
                 r_pred = tf.matmul(state, self.r_weight) + self.r_bias
                 c_pred_list.append(c_pred)
                 r_pred_list.append(r_pred)
+            c_pred_list = tf.convert_to_tensor(c_pred_list)
+            r_pred_list = tf.convert_to_tensor(r_pred_list)
+
+        with tf.name_scope('normal_pred'):
+            c_normal_pred_list = tf.sigmoid(c_pred_list)
+            r_normal_pred_list = tf.abs(r_pred_list)
 
         with tf.name_scope('loss'):
-            pass
+            c_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.input_data_x, logits=c_pred_list)
+            r_loss = tf.cast(tf.losses.mean_squared_error(labels=self.input_data_t, predictions=r_pred_list),
+                             dtype=tf.float64)
+            loss_sum = c_loss + self.c_r_ratio * r_loss
 
         with tf.name_scope('optimization'):
-            pass
+            optimizer = tf.train.AdamOptimizer()
+            train_op = optimizer.minimize(loss_sum)
 
     def __output_parameter(self):
         # TODO 修改初始化策略

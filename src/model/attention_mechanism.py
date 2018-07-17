@@ -14,7 +14,6 @@ class AttentionMechanism(object):
         """
         self.rnn = revised_rnn
         self.intensity = intensity
-        self.hidden_states = tf.unstack(revised_rnn.states_tensor, axis=0)
 
     # 每call一次，输出一次hidden state的混合， 可变参数集需要指明时间点 t，以输出[batch_size, hidden_states]
     def __call__(self, *args, **kwargs):
