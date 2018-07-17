@@ -21,11 +21,8 @@ class AttentionMechanism(object):
         if not kwargs.__contains__('time_stamp') or (not isinstance(kwargs['time_stamp'], int)):
             raise ValueError('must contains parameter "time_stamp", and it must be int')
         time_stamp = kwargs['time_stamp']
-        valid_hidden_states = self.hidden_states[0: time_stamp]
         weight = self.weight_calc(time_stamp=time_stamp)
-
-        mix_hidden_state = tf.reduce_sum(weight * valid_hidden_states, axis=0)
-        return mix_hidden_state
+        return weight
 
     def argument_validation(self):
         if not isinstance(self.rnn, rnn.RevisedRNN):
@@ -39,7 +36,8 @@ class AttentionMechanism(object):
 
 
 class Intensity(object):
-    def __init__(self, time_stamp, batch_size, x_depth, t_depth, mutual_intensity_path, base_intensity_path, name):
+    def __init__(self, time_stamp, batch_size, x_depth, t_depth, mutual_intensity_path, base_intensity_path, name,
+                 placeholder_x, placeholder_t):
         self.x_depth = x_depth
         self.t_depth = t_depth
         self.time_stamp = time_stamp
@@ -50,8 +48,8 @@ class Intensity(object):
         self.base_intensity = self.read_base_intensity()
         self.mutual_intensity = self.read_base_intensity()
 
-        self.input_x = None
-        self.input_t = None
+        self.input_x = placeholder_x
+        self.input_t = placeholder_t
         self.name = name
 
         self.build()
@@ -59,11 +57,7 @@ class Intensity(object):
 
     # TODO,其实此处的输入和RNN是一样的，回头确认一下是不是可以通过一次输入完成模型构建
     def build(self):
-        with tf.name_scope('attention_input'):
-            self.input_x = tf.placeholder(dtype=tf.float64, shape=[self.time_stamp, self.batch_size, self.x_depth],
-                                          name='input_x')
-            self.input_t = tf.placeholder(dtype=tf.float64, shape=[self.time_stamp, self.batch_size, self.t_depth],
-                                          name='input_t')
+        pass
 
     def read_mutual_intensity(self):
         sum_intensity = len(self.mutual_intensity_path)
@@ -84,11 +78,21 @@ class Intensity(object):
         input_x_list = input_x_list[0: time_stamp]
         input_t_list = input_t_list[0: time_stamp]
 
-        unnormalized_intensity = tf.convert_to_tensor(self.calculate_intensity(input_x_list, input_t_list), tf.float64)
+        unnormalized_intensity = tf.convert_to_tensor(self.calculate_intensity(input_x_list, input_t_list, time_stamp),
+                                                      tf.float64)
         intensity_sum = tf.reduce_sum(unnormalized_intensity, axis=0)
         weight = unnormalized_intensity / intensity_sum
         return weight
 
     # TODO 计算每一个值
-    def calculate_intensity(self, input_x_list, input_t_list):
-        return tf.convert_to_tensor(np.ones([self.time_stamp], ), dtype=tf.float64)
+    def calculate_intensity(self, input_x_list, input_t_list, time_stamp):
+        return tf.convert_to_tensor(np.ones([time_stamp], ), dtype=tf.float64)
+
+
+def main():
+    # AttentionMechanism()
+    pass
+
+
+if __name__ == "__main__":
+    main()

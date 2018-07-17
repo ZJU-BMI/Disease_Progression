@@ -24,11 +24,10 @@ class RevisedGRUCell(object):
         self._initial_strategy_map = initial_strategy_map
         self._name = name
 
-        # define weight
-        self._gate_weight = None
-        self._gate_bias = None
-        self._candidate_weight = None
-        self._candidate_bias = None
+        # define weight and input shape
+        self.parameter_map = {}
+        self.t_depth = None
+        self.x_depth = None
 
         self.built = False
 
@@ -49,26 +48,28 @@ class RevisedGRUCell(object):
         :param t_depth:
         :return:
         """
-
         # define the parameter a GRU will use
-        with tf.name_scope(self._name):
-            with tf.variable_scope(self._name + "_para", reuse=tf.AUTO_REUSE):
-                self._gate_weight = tf.get_variable(name='gate_weight',
-                                                    shape=[t_depth, self._hidden_state * 2],
-                                                    initializer=self._initial_strategy_map['gate_weight'],
-                                                    dtype=tf.float64)
-                self._gate_bias = tf.get_variable(name='gate_bias',
-                                                  shape=[self._hidden_state * 2],
-                                                  initializer=self._initial_strategy_map['gate_bias'],
-                                                  dtype=tf.float64)
-                self._candidate_weight = tf.get_variable(name='candidate_weight',
-                                                         shape=[x_depth + self._hidden_state, self._hidden_state],
-                                                         initializer=self._initial_strategy_map['candidate_weight'],
-                                                         dtype=tf.float64)
-                self._candidate_bias = tf.get_variable(name='candidate_bias',
-                                                       shape=[self._hidden_state],
-                                                       initializer=self._initial_strategy_map['candidate_bias'],
-                                                       dtype=tf.float64)
+        with tf.variable_scope("cell_para", reuse=tf.AUTO_REUSE):
+            self.parameter_map['gate_weight'] = tf.get_variable(name='gate_weight',
+                                                                shape=[t_depth, self._hidden_state * 2],
+                                                                initializer=self._initial_strategy_map['gate_weight'],
+                                                                dtype=tf.float64)
+            self.parameter_map['gate_bias'] = tf.get_variable(name='gate_bias', shape=[self._hidden_state * 2],
+                                                              initializer=self._initial_strategy_map['gate_bias'],
+                                                              dtype=tf.float64)
+            self.parameter_map['candidate_weight'] = tf.get_variable(name='candidate_weight',
+                                                                     shape=
+                                                                     [x_depth + self._hidden_state, self._hidden_state],
+                                                                     initializer=
+                                                                     self._initial_strategy_map['candidate_weight'],
+                                                                     dtype=tf.float64)
+            self.parameter_map['candidate_bias'] = tf.get_variable(name='candidate_bias', shape=[self._hidden_state],
+                                                                   initializer=
+                                                                   self._initial_strategy_map['candidate_bias'],
+                                                                   dtype=tf.float64)
+        self.x_depth = x_depth
+        self.t_depth = t_depth
+        self.built = True
 
     def __call__(self, input_x, input_t, state):
         """
@@ -79,10 +80,13 @@ class RevisedGRUCell(object):
         :param state:
         :return:
         """
-        gate_weight = self._gate_weight
-        gate_bias = self._gate_bias
-        candidate_weight = self._candidate_weight
-        candidate_bias = self._candidate_bias
+        with tf.variable_scope("cell_para", reuse=tf.AUTO_REUSE):
+            gate_weight = tf.get_variable("gate_weight", shape=[self.t_depth, self._hidden_state * 2], dtype=tf.float64)
+            gate_bias = tf.get_variable("gate_bias", shape=[self._hidden_state * 2], dtype=tf.float64)
+            candidate_weight = tf.get_variable("candidate_weight",
+                                               shape=[self.x_depth + self._hidden_state, self._hidden_state],
+                                               dtype=tf.float64)
+            candidate_bias = tf.get_variable("candidate_bias", shape=[self._hidden_state], dtype=tf.float64)
 
         with tf.name_scope('gate_calc'):
             gate_value = math_ops.matmul(input_t, gate_weight)
