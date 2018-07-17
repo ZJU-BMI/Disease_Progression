@@ -16,6 +16,7 @@
       <w>relu</w>
       <w>softmax</w>
       <w>tanh</w>
+      <w>tensorboard</w>
       <w>tensorflow</w>
       <w>unnormalized</w>
       <w>varscope</w>
