@@ -20,41 +20,44 @@ class RevisedRNN(object):
         :param input_x: a tf.placeholder of input_x, with size [time_steps, batch_size, x_depth] dtype=tf.float64
         :param input_t: a tf.placeholder of input_t, with size [time_steps, batch_size, t_depth] dtype=tf.float64
         """
-        self.time_stamp = time_stamp
-        self.batch_size = batch_size
-        self.x_depth = x_depth
-        self.t_depth = t_depth
-        self.hidden_state = hidden_state
-        self.init_strategy_map = init_strategy_map
-        self.zero_state = zero_state
-        self.activation = activation
+        self.__time_stamp = time_stamp
+        self.__batch_size = batch_size
+        self.__x_depth = x_depth
+        self.__t_depth = t_depth
+        self.__hidden_state = hidden_state
+        self.__init_strategy_map = init_strategy_map
+        self.__zero_state = zero_state
+        self.__activation = activation
 
-        self.rnn_cell = None
+        # TODO 如果今后有时间，继续把LSTM，或者其他CELL修改为可以直接输入Time的形式
+        # 如果真的这么做了，那么__build，call函数都需要大修
+        self.__rnn_cell = None
         self.input_x = input_x
         self.input_t = input_t
 
-        self.build()
+        self.__build()
 
         # states tensor is a fully unrolled tensor with shape [time_step, batch_size, hidden_state]
-        self.states_tensor = self.call(input_x=self.input_x, input_t=self.input_t)
+        self.states_tensor = self.__call__(input_x=self.input_x, input_t=self.input_t)
         print('initialize rnn and build network accomplished')
 
-    def build(self):
+    def __build(self):
         with tf.name_scope('RRNN_input'):
-            self.rnn_cell = revised_rnn_cell.RevisedGRUCell(self.hidden_state, self.init_strategy_map, name='RGRU_Cell',
-                                                            activation=self.activation)
-            self.rnn_cell.build(x_depth=self.x_depth, t_depth=self.t_depth)
+            self.rnn_cell = revised_rnn_cell.RevisedGRUCell(self.__hidden_state, self.__init_strategy_map,
+                                                            name='RGRU_Cell', activation=self.__activation,
+                                                            x_depth=self.__x_depth, t_depth=self.__t_depth)
 
-    def call(self, input_x, input_t):
+    def __call__(self, input_x, input_t):
         self.__argument_validation(input_x, input_t)
 
-        state = self.zero_state
-        states_list = []
+        state = self.__zero_state
+        states_list = list()
+        states_list.append(state)
         with tf.name_scope('rnn_states'):
             input_x = tf.unstack(input_x, axis=0, name='unstack_x')
             input_t = tf.unstack(input_t, axis=0, name='unstack_t')
 
-            for i in range(0, self.time_stamp):
+            for i in range(0, self.__time_stamp):
                 with tf.name_scope('revised_gru'):
                     step_i_x = input_x[i]
                     step_i_t = input_t[i]
@@ -81,11 +84,11 @@ class RevisedRNN(object):
         input_x_shape = input_x.shape
         input_t_shape = input_t.shape
 
-        if len(input_x_shape.dims) != 3 or input_x_shape[0].value != self.time_stamp or input_x_shape[1].value != \
-                self.batch_size or input_x_shape[2] != self.x_depth:
+        if len(input_x_shape.dims) != 3 or input_x_shape[0].value != self.__time_stamp or input_x_shape[1].value != \
+                self.__batch_size or input_x_shape[2] != self.__x_depth:
             raise ValueError('input_x shape error')
-        if len(input_t_shape.dims) != 3 or input_t_shape[0].value != self.time_stamp or input_t_shape[1].value != \
-                self.batch_size or input_t_shape[2] != self.t_depth:
+        if len(input_t_shape.dims) != 3 or input_t_shape[0].value != self.__time_stamp or input_t_shape[1].value != \
+                self.__batch_size or input_t_shape[2] != self.__t_depth:
             raise ValueError('input_y shape error')
 
 
