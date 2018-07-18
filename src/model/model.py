@@ -5,17 +5,32 @@ import attention_mechanism
 import rnn
 
 
-# TODO 还需要完善文档，特别是对输入的参数的格式设定，要全部特别说明
 class ModelConfiguration(object):
-    def __init__(self, learning_rate, max_train_steps, batch_size, x_depth, t_depth, time_stamps, num_hidden,
-                 cell_type, summary_save_path, c_r_ratio, activation, init_strategy, mutual_intensity_path,
-                 base_intensity_path, ):
+    def __init__(self, learning_rate, batch_size, x_depth, time_stamps, num_hidden, cell_type, summary_save_path,
+                 c_r_ratio, activation, init_strategy, mutual_intensity_path, base_intensity_path, zero_state,
+                 t_depth=1):
+        """
+        :param learning_rate: should be a scalar
+        :param batch_size: the size of minibatch, a scalar
+        :param x_depth: defines the dimension of the input_x in a specific time stamp
+        :param t_depth: defines the time of a specific time stamp, raise error if it is not 1
+        :param time_stamps: should be a scalar, the length of RNN
+        :param num_hidden: should be a scalar, the dimension of a hidden state
+        :param cell_type: should be a string, 'revised_gru' or 'gru'
+        :param summary_save_path: a folder path, used to store information of tensorboard
+        :param c_r_ratio: should be a scalar, the coefficient to adjust the weight between classification task and
+        regression task.
+        :param zero_state: the zero state of rnn, np.ndarray with shape [num_hidden,]
+        :param activation: should be a function object, activation function of RNN
+        :param init_strategy: parameter initialize strategy for every parameter
+        :param mutual_intensity_path: a file path, reading the information of mutual intensity
+        :param base_intensity_path: a file path, reading the information of base intensity
+        """
         # Tensorboard Data And Output Save Path
         self.model_summary_save_path = summary_save_path
 
         # Training Parameters
         self.learning_rate = learning_rate
-        self.max_training_steps = max_train_steps
         self.batch_size = batch_size
 
         # Model Parameters
@@ -28,8 +43,7 @@ class ModelConfiguration(object):
         self.num_hidden = num_hidden
         self.cell_type = cell_type
         self.activation = activation
-        # TODO 初始化策略
-        self.zero_state = np.random.normal(0, 1, [num_hidden, ])
+        self.zero_state = zero_state
         self.init_strategy = init_strategy
 
         # Attention Parameters
@@ -44,7 +58,6 @@ class AttentionBasedModel(object):
 
         # Training Parameters
         self.learning_rate = model_config.learning_rate
-        self.max_training_steps = model_config.max_training_steps
         self.batch_size = model_config.batch_size
 
         # General Model Parameters
@@ -85,7 +98,7 @@ class AttentionBasedModel(object):
         revised_rnn = rnn.RevisedRNN(time_stamp=self.time_stamps, batch_size=self.batch_size,
                                      x_depth=self.input_x_depth, t_depth=self.input_t_depth,
                                      hidden_state=self.num_hidden, init_strategy_map=self.init_strategy,
-                                     activation=self.activation, zero_state=self.zero_state, name='revised_rnn',
+                                     activation=self.activation, zero_state=self.zero_state,
                                      input_x=self.input_data_x, input_t=self.input_data_t)
         intensity_component = attention_mechanism.Intensity(time_stamp=self.time_stamps, batch_size=self.batch_size,
                                                             x_depth=self.input_x_depth, t_depth=self.input_t_depth,
@@ -136,16 +149,15 @@ class AttentionBasedModel(object):
             train_op = optimizer.minimize(loss_sum)
 
     def __output_parameter(self):
-        # TODO 修改初始化策略
         with tf.variable_scope('pred_para', reuse=tf.AUTO_REUSE):
             c_weight = tf.get_variable(name='classification_weight', shape=[self.num_hidden, self.input_x_depth],
-                                       initializer=tf.random_normal_initializer(), dtype=tf.float64)
+                                       initializer=self.init_strategy["classification_weight"], dtype=tf.float64)
             c_bias = tf.get_variable(name='classification_bias', shape=[self.input_x_depth],
-                                     initializer=tf.zeros_initializer(), dtype=tf.float64)
+                                     initializer=self.init_strategy["classification_bias"], dtype=tf.float64)
             r_weight = tf.get_variable(name='regression_weight', shape=[self.num_hidden, self.input_t_depth],
-                                       initializer=tf.random_normal_initializer(), dtype=tf.float64)
+                                       initializer=self.init_strategy["regression_weight"], dtype=tf.float64)
             r_bias = tf.get_variable(name='regression_bias', shape=[1, ],
-                                     initializer=tf.zeros_initializer(), dtype=tf.float64)
+                                     initializer=self.init_strategy["regression_bias"], dtype=tf.float64)
         return c_weight, c_bias, r_weight, r_bias
 
 
@@ -157,11 +169,18 @@ def main():
     init_map['gate_bias'] = tf.random_normal_initializer(0, 1)
     init_map['candidate_weight'] = tf.random_normal_initializer(0, 1)
     init_map['candidate_bias'] = tf.random_normal_initializer(0, 1)
+    init_map['classification_weight'] = tf.random_normal_initializer(0, 1)
+    init_map['classification_bias'] = tf.random_normal_initializer(0, 1)
+    init_map['regression_weight'] = tf.random_normal_initializer(0, 1)
+    init_map['regression_bias'] = tf.random_normal_initializer(0, 1)
+    num_hidden = 7
+    zero_state = np.random.normal(0, 1, [num_hidden, ])
     mi_path = ""
     bi_path = ""
-    model_config = ModelConfiguration(learning_rate=0.001, max_train_steps=4, batch_size=3, x_depth=5, t_depth=1,
-                                      time_stamps=6, num_hidden=7, cell_type='revised_gru', summary_save_path=save_path,
-                                      c_r_ratio=1, activation=activation, init_strategy=init_map,
+    model_config = ModelConfiguration(learning_rate=0.001, batch_size=3, x_depth=5, t_depth=1,
+                                      time_stamps=6, num_hidden=num_hidden, cell_type='revised_gru',
+                                      summary_save_path=save_path,
+                                      c_r_ratio=1, activation=activation, init_strategy=init_map, zero_state=zero_state,
                                       mutual_intensity_path=mi_path, base_intensity_path=bi_path)
     AttentionBasedModel(model_config)
     init = tf.global_variables_initializer()

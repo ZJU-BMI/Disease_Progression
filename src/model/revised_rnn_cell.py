@@ -5,20 +5,7 @@ from tensorflow.python.ops import nn_ops
 
 
 class RevisedGRUCell(object):
-    """
-    in the consideration of compatibility, all vector should be defined as matrix with shape= (k,)
-    the input_x shape should be 2-d matrix with shape (time stamp, input_depth)
-    the input_t shape should be 2-d matrix with shape (time stamp, 1)
-
-    revised the method that calculate gate
-    """
-
     def __init__(self, hidden_states, initial_strategy_map, name=None, activation=None):
-        """
-        :param hidden_states: length of hidden state vector
-        :param name: the name in name scope
-        :param initial_strategy_map: a dict, contains all parameters initializer
-        """
         self._hidden_state = hidden_states
         self._activation = activation
         self._initial_strategy_map = initial_strategy_map
@@ -48,7 +35,7 @@ class RevisedGRUCell(object):
         :param t_depth:
         :return:
         """
-        # define the parameter a GRU will use
+        # define the parameter a GRU cell
         with tf.variable_scope("cell_para", reuse=tf.AUTO_REUSE):
             self.parameter_map['gate_weight'] = tf.get_variable(name='gate_weight',
                                                                 shape=[t_depth, self._hidden_state * 2],
@@ -73,12 +60,10 @@ class RevisedGRUCell(object):
 
     def __call__(self, input_x, input_t, state):
         """
-        :param input_x:
-        :param input_t:
-        x_input is a matrix with shape [batch_size, input_depth]
-        t_input is a matrix with shape [batch_size, 1]
-        :param state:
-        :return:
+        :param input_x: tf.placeholder with shape [batch_size, input_depth]
+        :param input_t: tf.placeholder a matrix with shape [batch_size, 1]
+        :param state: the previous hidden states
+        :return: new hidden state
         """
         with tf.variable_scope("cell_para", reuse=tf.AUTO_REUSE):
             gate_weight = tf.get_variable("gate_weight", shape=[self.t_depth, self._hidden_state * 2], dtype=tf.float64)
@@ -95,6 +80,8 @@ class RevisedGRUCell(object):
 
         with tf.name_scope('gate_split'):
             r, u = array_ops.split(value=gate_value, num_or_size_splits=2, axis=1)
+            r = tf.convert_to_tensor(r, name='reset_gate')
+            u = tf.convert_to_tensor(u, name='update_gate')
             r_state = r * state
 
         with tf.name_scope('candidate_calc'):
@@ -106,7 +93,7 @@ class RevisedGRUCell(object):
         with tf.name_scope('new_state'):
             new_h = u * state + (1 - u) * c
 
-        return new_h, new_h
+        return new_h
 
     def legal_examine(self):
         """
@@ -126,8 +113,9 @@ class RevisedGRUCell(object):
 
         key_name = ['gate_weight', 'gate_bias', 'candidate_weight', 'candidate_bias']
         for key in initial_strategy_map:
-            if not (isinstance(initial_strategy_map[key], tf.keras.initializers.Initializer) and (key in key_name)):
-                legal_flag = False
+            if key in key_name:
+                if not (isinstance(initial_strategy_map[key], tf.keras.initializers.Initializer)):
+                    legal_flag = False
 
         if not legal_flag:
             raise Exception('the format of parameter is not right')

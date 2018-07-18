@@ -51,12 +51,7 @@ class Intensity(object):
         self.input_t = placeholder_t
         self.name = name
 
-        self.build()
         print('initialize rnn and build mutual intensity component accomplished')
-
-    # TODO,其实此处的输入和RNN是一样的，回头确认一下是不是可以通过一次输入完成模型构建
-    def build(self):
-        pass
 
     def read_mutual_intensity(self):
         sum_intensity = len(self.mutual_intensity_path)

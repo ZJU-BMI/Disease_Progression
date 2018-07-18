@@ -6,7 +6,20 @@ import revised_rnn_cell
 
 class RevisedRNN(object):
     def __init__(self, time_stamp, batch_size, x_depth, t_depth, hidden_state, init_strategy_map,
-                 activation, zero_state, name, input_x, input_t):
+                 activation, zero_state, input_x, input_t):
+        """
+        :param time_stamp: scalar
+        :param batch_size: scalar, the number of batch_size, should be assigned explicitly
+        :param x_depth: scalar, the dimension of x
+        :param t_depth: scalar, the dimension of t, should be 1
+        :param hidden_state: scalar
+        :param init_strategy_map: parameter strategy map, at least contain 4 elements with key 'gate_weight',
+        'gate_bias', 'candidate_weight', 'candidate_bias'. each key corresponds to a tf.Variable initializer
+        :param activation: a function object
+        :param zero_state: the zero state of rnn
+        :param input_x: a tf.placeholder of input_x, with size [time_steps, batch_size, x_depth] dtype=tf.float64
+        :param input_t: a tf.placeholder of input_t, with size [time_steps, batch_size, t_depth] dtype=tf.float64
+        """
         self.time_stamp = time_stamp
         self.batch_size = batch_size
         self.x_depth = x_depth
@@ -15,13 +28,14 @@ class RevisedRNN(object):
         self.init_strategy_map = init_strategy_map
         self.zero_state = zero_state
         self.activation = activation
-        self.name = name
 
         self.rnn_cell = None
         self.input_x = input_x
         self.input_t = input_t
 
         self.build()
+
+        # states tensor is a fully unrolled tensor with shape [time_step, batch_size, hidden_state]
         self.states_tensor = self.call(input_x=self.input_x, input_t=self.input_t)
         print('initialize rnn and build network accomplished')
 
@@ -31,11 +45,8 @@ class RevisedRNN(object):
                                                             activation=self.activation)
             self.rnn_cell.build(x_depth=self.x_depth, t_depth=self.t_depth)
 
-    def call(self, **kwargs):
-        with tf.name_scope('input_reconstruct'):
-            input_x = tf.convert_to_tensor(kwargs['input_x'], dtype=tf.float64)
-            input_t = tf.convert_to_tensor(kwargs['input_t'], dtype=tf.float64)
-            self.__argument_validation(input_x, input_t)
+    def call(self, input_x, input_t):
+        self.__argument_validation(input_x, input_t)
 
         state = self.zero_state
         states_list = []
@@ -47,7 +58,7 @@ class RevisedRNN(object):
                 with tf.name_scope('revised_gru'):
                     step_i_x = input_x[i]
                     step_i_t = input_t[i]
-                    state, _ = self.rnn_cell(step_i_x, step_i_t, state)
+                    state = self.rnn_cell(step_i_x, step_i_t, state)
                 states_list.append(state)
             states_tensor = tf.convert_to_tensor(states_list, dtype=tf.float64)
             self.states_tensor = states_tensor
@@ -89,12 +100,12 @@ def main():
     x = np.random.normal(0, 1, [8, 2, 4], )
     t = np.random.normal(0, 1, [8, 2, 1])
 
-    placeholder_x = tf.placeholder('float', shape=[8, 2, 4], name='input_x')
-    placeholder_t = tf.placeholder('float', shape=[8, 2, 1], name='input_t')
+    placeholder_x = tf.placeholder('float', shape=[8, 2, 4], name='input_x', dtype=tf.float64)
+    placeholder_t = tf.placeholder('float', shape=[8, 2, 1], name='input_t', dtype=tf.float64)
 
     zero_state = np.random.normal(0, 1, [5, ])
     revised_rnn = RevisedRNN(time_stamp=8, batch_size=2, x_depth=4, t_depth=1, hidden_state=5,
-                             init_strategy_map=init_map, activation=tf.tanh, zero_state=zero_state, name='rnn',
+                             init_strategy_map=init_map, activation=tf.tanh, zero_state=zero_state,
                              input_t=placeholder_t, input_x=placeholder_x)
     init = tf.global_variables_initializer()
 
