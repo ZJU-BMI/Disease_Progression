@@ -8,11 +8,12 @@ import rnn
 class ModelConfiguration(object):
     def __init__(self, learning_rate, batch_size, x_depth, time_stamps, num_hidden, cell_type, summary_save_path,
                  c_r_ratio, activation, init_strategy, mutual_intensity_path, base_intensity_path, zero_state,
-                 t_depth=1):
+                 file_encoding, t_depth=1):
         """
         :param learning_rate: should be a scalar
         :param batch_size: the size of minibatch, a scalar
-        :param x_depth: defines the dimension of the input_x in a specific time stamp
+        :param x_depth: defines the dimension of the input_x in a specific time stamp, it also indicates the number
+        of type of event
         :param t_depth: defines the time of a specific time stamp, raise error if it is not 1
         :param time_stamps: should be a scalar, the length of RNN
         :param num_hidden: should be a scalar, the dimension of a hidden state
@@ -25,6 +26,7 @@ class ModelConfiguration(object):
         :param init_strategy: parameter initialize strategy for every parameter
         :param mutual_intensity_path: a file path, reading the information of mutual intensity
         :param base_intensity_path: a file path, reading the information of base intensity
+        :param file_encoding: intensity file encoding
         """
         # Tensorboard Data And Output Save Path
         self.model_summary_save_path = summary_save_path
@@ -49,6 +51,7 @@ class ModelConfiguration(object):
         # Attention Parameters
         self.mutual_intensity_path = mutual_intensity_path
         self.base_intensity_path = base_intensity_path
+        self.file_encoding = file_encoding
 
 
 class AttentionBasedModel(object):
@@ -76,6 +79,7 @@ class AttentionBasedModel(object):
         # Attention Parameters
         self.__mutual_intensity_path = model_config.mutual_intensity_path
         self.__base_intensity_path = model_config.base_intensity_path
+        self.__file_encoding = model_config.file_encoding
 
         # Output Parameters
         self.__c_weight = None
@@ -110,7 +114,10 @@ class AttentionBasedModel(object):
                                                             mutual_intensity_path=self.__mutual_intensity_path,
                                                             base_intensity_path=self.__base_intensity_path,
                                                             name='intensity', placeholder_x=self.input_data_x,
-                                                            placeholder_t=self.input_data_t)
+                                                            placeholder_t=self.input_data_t,
+                                                            file_encoding=self.__file_encoding,
+                                                            para_init_map=self.__init_strategy)
+
         attention_component = attention_mechanism.AttentionMechanism(revised_rnn, intensity_component)
         self.__c_weight, self.__c_bias, self.__r_weight, self.__r_bias = self.__output_parameter()
 
@@ -203,22 +210,30 @@ def main():
     init_map['classification_bias'] = tf.random_normal_initializer(0, 1)
     init_map['regression_weight'] = tf.random_normal_initializer(0, 1)
     init_map['regression_bias'] = tf.random_normal_initializer(0, 1)
+    init_map['mutual_intensity'] = tf.random_normal_initializer(0, 1)
+    init_map['base_intensity'] = tf.random_normal_initializer(0, 1)
 
     num_hidden = 3
     batch_size = 8
-    x_depth = 5
+    x_depth = 6
     t_depth = 1
     time_stamps = 4
     batch_count = 5
-
+    cell_type = 'revised_gru'
     zero_state = np.random.normal(0, 1, [num_hidden, ])
-    mi_path = ""
-    bi_path = ""
-    model_config = ModelConfiguration(learning_rate=0.001, batch_size=batch_size, x_depth=x_depth, t_depth=t_depth,
-                                      time_stamps=time_stamps, num_hidden=num_hidden, cell_type='revised_gru',
-                                      summary_save_path=save_path, c_r_ratio=1, activation=activation,
-                                      init_strategy=init_map, zero_state=zero_state, mutual_intensity_path=mi_path,
-                                      base_intensity_path=bi_path)
+    mi_path = "D:\\PythonProject\\DiseaseProgression\\resource\\mutual_intensity_sample.csv"
+    bi_path = "D:\\PythonProject\\DiseaseProgression\\resource\\base_intensity_sample.csv"
+    file_encoding = 'utf-8-sig'
+    c_r_ratio = 1
+    learning_rate = 0.001
+
+    model_config = ModelConfiguration(learning_rate=learning_rate, batch_size=batch_size, x_depth=x_depth,
+                                      t_depth=t_depth, time_stamps=time_stamps, num_hidden=num_hidden,
+                                      cell_type=cell_type, summary_save_path=save_path, c_r_ratio=c_r_ratio,
+                                      activation=activation, init_strategy=init_map, zero_state=zero_state,
+                                      mutual_intensity_path=mi_path, base_intensity_path=bi_path,
+                                      file_encoding=file_encoding)
+
     attention_model = AttentionBasedModel(model_config)
     init = tf.global_variables_initializer()
 

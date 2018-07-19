@@ -1,3 +1,5 @@
+import csv
+
 import numpy as np
 import tensorflow as tf
 
@@ -35,32 +37,92 @@ class AttentionMechanism(object):
 
 class Intensity(object):
     def __init__(self, time_stamp, batch_size, x_depth, t_depth, mutual_intensity_path, base_intensity_path, name,
-                 placeholder_x, placeholder_t):
+                 placeholder_x, placeholder_t, file_encoding, para_init_map):
         self.__x_depth = x_depth
         self.__t_depth = t_depth
         self.__time_stamp = time_stamp
         self.__batch_size = batch_size
         self.__name = name
+        self.__file_encoding = file_encoding
+        self.__para_init_map = para_init_map
 
         # get_intensity
         self.__mutual_intensity_path = mutual_intensity_path
         self.__base_intensity_path = base_intensity_path
-        self.__base_intensity = self.read_base_intensity()
-        self.__mutual_intensity = self.read_base_intensity()
+        self.__base_intensity = self.__read_base_intensity()
+        self.__mutual_intensity = self.__read_base_intensity()
 
         # define placeholder
         self.input_x = placeholder_x
         self.input_t = placeholder_t
 
+        # define parameter
+        self.__init_strategy = para_init_map
+        self.__mutual_parameter = None
+        self.__combine_parameter = None
+
         print('initialize rnn and build mutual intensity component accomplished')
 
-    def read_mutual_intensity(self):
-        sum_intensity = len(self.__mutual_intensity_path)
-        return sum_intensity
+    # TODO 检查para init strategy的合法性
+    def __argument_check(self):
+        pass
 
-    def read_base_intensity(self):
-        sum_intensity = len(self.__base_intensity_path)
-        return sum_intensity
+    # TODO 时间降低的策略
+    def __time_decay(self, time_stamp):
+        pass
+
+    def __attention_parameter(self):
+        size = self.__x_depth
+        with tf.variable_scope('att_para', reuse=tf.AUTO_REUSE):
+            # TODO 此处要核验线性组合的正确性，是row影响col还是反过来要再次明确
+            mutual = tf.get_variable(name='mutual', shape=[size, 1], dtype=tf.float64,
+                                     initializer=self.__init_strategy['mutual_intensity'])
+            combine = tf.get_variable(name='base', shape=[size, 1], dtype=tf.float64,
+                                      initializer=self.__init_strategy['mutual_intensity'])
+            self.__mutual_parameter = mutual
+            self.__combine_parameter = combine
+
+    def __read_mutual_intensity(self):
+        mutual_file_path = self.__mutual_intensity_path
+        encoding = self.__file_encoding
+        size = self.__x_depth
+
+        mutual_intensity = np.zeros([size, size])
+        with open(mutual_file_path, 'r', encoding=encoding, newline="") as file:
+            csv_reader = csv.reader(file)
+            row_index = 0
+            for line in csv_reader:
+                if len(line) != size:
+                    raise ValueError('mutual intensity incompatible')
+                for col_index in range(0, size):
+                    mutual_intensity[row_index][col_index] = line[col_index]
+                row_index += 1
+            if row_index != size - 1:
+                raise ValueError('mutual intensity incompatible')
+
+        with tf.name_scope('m_intensity'):
+            mutual_intensity = tf.convert_to_tensor(mutual_intensity, dtype=tf.float64)
+
+        return mutual_intensity
+
+    def __read_base_intensity(self):
+        base_file_path = self.__base_intensity_path
+        encoding = self.__file_encoding
+        size = self.__x_depth
+
+        base_intensity = np.zeros([1, size])
+        with open(base_file_path, 'r', encoding=encoding, newline="") as file:
+            csv_reader = csv.reader(file)
+            for line in csv_reader:
+                if len(line) != size:
+                    raise ValueError('mutual intensity incompatible')
+                for col_index in range(0, size):
+                    base_intensity[0][col_index] = line[col_index]
+                break
+
+        with tf.name_scope('b_intensity'):
+            base_intensity = tf.convert_to_tensor(base_intensity, dtype=tf.float64)
+        return base_intensity
 
     # 每call一次，均根据此时的时间信息，计算mutual intensity的调和平均数，需要使用时间信息，计算之前的信息混合
     def __call__(self, *args, **kwargs):
@@ -76,7 +138,7 @@ class Intensity(object):
 
         with tf.name_scope('unnormal'):
             unnormalized_intensity = tf.convert_to_tensor(
-                self.calculate_intensity(input_x_list, input_t_list, time_stamp), tf.float64)
+                self.__calculate_intensity(input_x_list, input_t_list, time_stamp), tf.float64)
 
         with tf.name_scope('weight'):
             intensity_sum = tf.reduce_sum(unnormalized_intensity, axis=0)
@@ -85,8 +147,11 @@ class Intensity(object):
         return weight
 
     # TODO 计算每一个值
-    def calculate_intensity(self, input_x_list, input_t_list, time_stamp):
-        node = tf.convert_to_tensor(np.ones([time_stamp], ), dtype=tf.float64)
+    def __calculate_intensity(self, input_x_list, input_t_list, time_stamp):
+        with tf.name_scope('intensity_cal'):
+            base = self.__base_intensity
+            mutual = self.__mutual_intensity
+
         return node
 
 
