@@ -40,12 +40,15 @@ class Intensity(object):
         self.__t_depth = t_depth
         self.__time_stamp = time_stamp
         self.__batch_size = batch_size
+        self.__name = name
+
+        # get_intensity
         self.__mutual_intensity_path = mutual_intensity_path
         self.__base_intensity_path = base_intensity_path
         self.__base_intensity = self.read_base_intensity()
         self.__mutual_intensity = self.read_base_intensity()
-        self.__name = name
 
+        # define placeholder
         self.input_x = placeholder_x
         self.input_t = placeholder_t
 
@@ -64,21 +67,27 @@ class Intensity(object):
         if not kwargs.__contains__('time_stamp') or not isinstance(kwargs['time_stamp'], int) or kwargs['time_stamp'] \
                 > self.input_x.shape[0].value:
             raise ValueError('kwargs must contains time_stamp, or value of time_stamp illegal')
-        time_stamp = kwargs['time_stamp']
-        input_x_list = tf.unstack(self.input_x, axis=0)
-        input_t_list = tf.unstack(self.input_t, axis=0)
-        input_x_list = input_x_list[0: time_stamp]
-        input_t_list = input_t_list[0: time_stamp]
+        with tf.name_scope('data_unstack'):
+            time_stamp = kwargs['time_stamp']
+            input_x_list = tf.unstack(self.input_x, axis=0)
+            input_t_list = tf.unstack(self.input_t, axis=0)
+            input_x_list = input_x_list[0: time_stamp]
+            input_t_list = input_t_list[0: time_stamp]
 
-        unnormalized_intensity = tf.convert_to_tensor(self.calculate_intensity(input_x_list, input_t_list, time_stamp),
-                                                      tf.float64)
-        intensity_sum = tf.reduce_sum(unnormalized_intensity, axis=0)
-        weight = unnormalized_intensity / intensity_sum
+        with tf.name_scope('unnormal'):
+            unnormalized_intensity = tf.convert_to_tensor(
+                self.calculate_intensity(input_x_list, input_t_list, time_stamp), tf.float64)
+
+        with tf.name_scope('weight'):
+            intensity_sum = tf.reduce_sum(unnormalized_intensity, axis=0)
+            weight = unnormalized_intensity / intensity_sum
+
         return weight
 
     # TODO 计算每一个值
     def calculate_intensity(self, input_x_list, input_t_list, time_stamp):
-        return tf.convert_to_tensor(np.ones([time_stamp], ), dtype=tf.float64)
+        node = tf.convert_to_tensor(np.ones([time_stamp], ), dtype=tf.float64)
+        return node
 
 
 def main():

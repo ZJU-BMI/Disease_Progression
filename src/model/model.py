@@ -54,111 +54,141 @@ class ModelConfiguration(object):
 class AttentionBasedModel(object):
     def __init__(self, model_config):
         # Tensorboard Data And Output Save Path
-        self.model_summary_save_path = model_config.model_summary_save_path
+        self.__model_summary_save_path = model_config.model_summary_save_path
 
         # Training Parameters
-        self.learning_rate = model_config.learning_rate
-        self.batch_size = model_config.batch_size
+        self.__learning_rate = model_config.learning_rate
+        self.__batch_size = model_config.batch_size
 
         # General Model Parameters
-        self.c_r_ratio = model_config.c_r_ratio
-        self.input_x_depth = model_config.input_x_depth
-        self.input_t_depth = model_config.input_t_depth
-        self.time_stamps = model_config.time_stamps
+        self.__c_r_ratio = model_config.c_r_ratio
+        self.__input_x_depth = model_config.input_x_depth
+        self.__input_t_depth = model_config.input_t_depth
+        self.__time_stamps = model_config.time_stamps
 
         # Network Parameters
-        self.num_hidden = model_config.num_hidden
-        self.cell_type = model_config.cell_type
-        self.activation = model_config.activation
-        self.zero_state = model_config.zero_state
-        self.init_strategy = model_config.init_strategy
+        self.__num_hidden = model_config.num_hidden
+        self.__cell_type = model_config.cell_type
+        self.__activation = model_config.activation
+        self.__zero_state = model_config.zero_state
+        self.__init_strategy = model_config.init_strategy
 
         # Attention Parameters
-        self.mutual_intensity_path = model_config.mutual_intensity_path
-        self.base_intensity_path = model_config.base_intensity_path
+        self.__mutual_intensity_path = model_config.mutual_intensity_path
+        self.__base_intensity_path = model_config.base_intensity_path
 
         # Output Parameters
-        self.c_weight = None
-        self.c_bias = None
-        self.r_weight = None
-        self.r_bias = None
+        self.__c_weight = None
+        self.__c_bias = None
+        self.__r_weight = None
+        self.__r_bias = None
 
+        # data feed node
         self.input_data_x = None
         self.input_data_t = None
+
+        # expose_node
+        self.merge_summary = None
+        self.optimize = None
 
         self.build()
 
     def build(self):
         with tf.name_scope('input_data'):
-            self.input_data_x = tf.placeholder('float64', shape=[self.time_stamps, self.batch_size,
-                                                                 self.input_x_depth], name='input_x')
-            self.input_data_t = tf.placeholder('float64', shape=[self.time_stamps, self.batch_size, self.input_t_depth],
-                                               name='input_t')
+            self.input_data_x = tf.placeholder('float64', shape=[self.__time_stamps, self.__batch_size,
+                                                                 self.__input_x_depth], name='input_x')
+            self.input_data_t = tf.placeholder('float64', shape=[self.__time_stamps, self.__batch_size,
+                                                                 self.__input_t_depth], name='input_t')
 
-        revised_rnn = rnn.RevisedRNN(time_stamp=self.time_stamps, batch_size=self.batch_size,
-                                     x_depth=self.input_x_depth, t_depth=self.input_t_depth,
-                                     hidden_state=self.num_hidden, init_strategy_map=self.init_strategy,
-                                     activation=self.activation, zero_state=self.zero_state,
+        revised_rnn = rnn.RevisedRNN(time_stamp=self.__time_stamps, batch_size=self.__batch_size,
+                                     x_depth=self.__input_x_depth, t_depth=self.__input_t_depth,
+                                     hidden_state=self.__num_hidden, init_strategy_map=self.__init_strategy,
+                                     activation=self.__activation, zero_state=self.__zero_state,
                                      input_x=self.input_data_x, input_t=self.input_data_t)
-        intensity_component = attention_mechanism.Intensity(time_stamp=self.time_stamps, batch_size=self.batch_size,
-                                                            x_depth=self.input_x_depth, t_depth=self.input_t_depth,
-                                                            mutual_intensity_path=self.mutual_intensity_path,
-                                                            base_intensity_path=self.base_intensity_path,
+        intensity_component = attention_mechanism.Intensity(time_stamp=self.__time_stamps, batch_size=self.__batch_size,
+                                                            x_depth=self.__input_x_depth, t_depth=self.__input_t_depth,
+                                                            mutual_intensity_path=self.__mutual_intensity_path,
+                                                            base_intensity_path=self.__base_intensity_path,
                                                             name='intensity', placeholder_x=self.input_data_x,
                                                             placeholder_t=self.input_data_t)
         attention_component = attention_mechanism.AttentionMechanism(revised_rnn, intensity_component)
-        self.c_weight, self.c_bias, self.r_weight, self.r_bias = self.__output_parameter()
+        self.__c_weight, self.__c_bias, self.__r_weight, self.__r_bias = self.__output_parameter()
 
         hidden_states_list = revised_rnn.states_tensor
 
         output_mix_hidden_state = []
         with tf.name_scope('attention'):
-            for time_stamps in range(1, self.time_stamps + 1):
-                weight = attention_component(time_stamp=time_stamps)
-                hidden_states = tf.unstack(hidden_states_list)[0: time_stamps]
-                state_list = []
-                for i in range(0, time_stamps):
-                    state_list.append(weight[i] * hidden_states[i])
-                state_list = tf.convert_to_tensor(state_list, tf.float64)
-                mix_state = tf.reduce_sum(state_list, axis=0)
-                output_mix_hidden_state.append(mix_state)
+            for time_stamps in range(1, self.__time_stamps + 1):
+                with tf.name_scope('mix_state'):
+                    with tf.name_scope('weight'):
+                        weight = attention_component(time_stamp=time_stamps)
+                    with tf.name_scope('states'):
+                        hidden_states = tf.unstack(hidden_states_list)[0: time_stamps]
+                    state_list = []
+                    with tf.name_scope('state_mix'):
+                        for i in range(0, time_stamps):
+                            state_list.append(weight[i] * hidden_states[i])
+                        state_list = tf.convert_to_tensor(state_list, tf.float64)
+                        mix_state = tf.reduce_sum(state_list, axis=0)
+                        output_mix_hidden_state.append(mix_state)
+            output_mix_hidden_state = tf.convert_to_tensor(output_mix_hidden_state, dtype=tf.float64,
+                                                           name='attention_states')
 
-        with tf.name_scope('unnormal_pred'):
+        with tf.name_scope('output'):
+            output_mix_hidden_state = tf.unstack(output_mix_hidden_state, axis=0)
             c_pred_list = []
             r_pred_list = []
-            for state in output_mix_hidden_state:
-                c_pred = tf.matmul(state, self.c_weight) + self.c_bias
-                r_pred = tf.matmul(state, self.r_weight) + self.r_bias
-                c_pred_list.append(c_pred)
-                r_pred_list.append(r_pred)
-            c_pred_list = tf.convert_to_tensor(c_pred_list)
-            r_pred_list = tf.convert_to_tensor(r_pred_list)
+            with tf.name_scope('c_output'):
+                for state in output_mix_hidden_state:
+                    c_pred = tf.matmul(state, self.__c_weight) + self.__c_bias
+                    c_pred_list.append(c_pred)
+                c_pred_list = tf.convert_to_tensor(c_pred_list)
+            with tf.name_scope('r_output'):
+                for state in output_mix_hidden_state:
+                    r_pred = tf.matmul(state, self.__r_weight) + self.__r_bias
+                    r_pred_list.append(r_pred)
+                r_pred_list = tf.convert_to_tensor(r_pred_list)
 
         with tf.name_scope('normal_pred'):
-            c_normal_pred_list = tf.sigmoid(c_pred_list)
-            r_normal_pred_list = tf.abs(r_pred_list)
+            self.__performance_measure(c_pred_list, r_pred_list)
 
         with tf.name_scope('loss'):
-            c_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.input_data_x, logits=c_pred_list)
-            r_loss = tf.cast(tf.losses.mean_squared_error(labels=self.input_data_t, predictions=r_pred_list),
-                             dtype=tf.float64)
-            loss_sum = c_loss + self.c_r_ratio * r_loss
+            with tf.name_scope('c_loss'):
+                c_loss = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.input_data_x,
+                                                                               logits=c_pred_list))
+            with tf.name_scope('r_loss'):
+                r_loss = tf.reduce_sum(tf.cast(tf.losses.mean_squared_error(labels=self.input_data_t,
+                                                                            predictions=r_pred_list),
+                                               dtype=tf.float64))
+            with tf.name_scope('loss_sum'):
+                loss_sum = c_loss + self.__c_r_ratio * r_loss
+
+            with tf.name_scope('summary'):
+                tf.summary.scalar('loss_c', c_loss)
+                tf.summary.scalar('loss_r', r_loss)
+                tf.summary.scalar('loss_sum', loss_sum)
 
         with tf.name_scope('optimization'):
             optimizer = tf.train.AdamOptimizer()
-            train_op = optimizer.minimize(loss_sum)
+            self.optimize = optimizer.minimize(loss_sum)
+
+        self.merge_summary = tf.summary.merge_all()
 
     def __output_parameter(self):
         with tf.variable_scope('pred_para', reuse=tf.AUTO_REUSE):
-            c_weight = tf.get_variable(name='classification_weight', shape=[self.num_hidden, self.input_x_depth],
-                                       initializer=self.init_strategy["classification_weight"], dtype=tf.float64)
-            c_bias = tf.get_variable(name='classification_bias', shape=[self.input_x_depth],
-                                     initializer=self.init_strategy["classification_bias"], dtype=tf.float64)
-            r_weight = tf.get_variable(name='regression_weight', shape=[self.num_hidden, self.input_t_depth],
-                                       initializer=self.init_strategy["regression_weight"], dtype=tf.float64)
+            c_weight = tf.get_variable(name='classification_weight', shape=[self.__num_hidden, self.__input_x_depth],
+                                       initializer=self.__init_strategy["classification_weight"], dtype=tf.float64)
+            c_bias = tf.get_variable(name='classification_bias', shape=[self.__input_x_depth],
+                                     initializer=self.__init_strategy["classification_bias"], dtype=tf.float64)
+            r_weight = tf.get_variable(name='regression_weight', shape=[self.__num_hidden, self.__input_t_depth],
+                                       initializer=self.__init_strategy["regression_weight"], dtype=tf.float64)
             r_bias = tf.get_variable(name='regression_bias', shape=[1, ],
-                                     initializer=self.init_strategy["regression_bias"], dtype=tf.float64)
+                                     initializer=self.__init_strategy["regression_bias"], dtype=tf.float64)
         return c_weight, c_bias, r_weight, r_bias
+
+    def __performance_measure(self, c_pred_list, r_pred_list):
+        # TODO, 加一个分门别类的测试精度，需要包括Recall, Specific, AUC, PR等
+        pass
 
 
 def main():
@@ -173,21 +203,38 @@ def main():
     init_map['classification_bias'] = tf.random_normal_initializer(0, 1)
     init_map['regression_weight'] = tf.random_normal_initializer(0, 1)
     init_map['regression_bias'] = tf.random_normal_initializer(0, 1)
-    num_hidden = 7
+
+    num_hidden = 3
+    batch_size = 8
+    x_depth = 5
+    t_depth = 1
+    time_stamps = 4
+    batch_count = 5
+
     zero_state = np.random.normal(0, 1, [num_hidden, ])
     mi_path = ""
     bi_path = ""
-    model_config = ModelConfiguration(learning_rate=0.001, batch_size=3, x_depth=5, t_depth=1,
-                                      time_stamps=6, num_hidden=num_hidden, cell_type='revised_gru',
-                                      summary_save_path=save_path,
-                                      c_r_ratio=1, activation=activation, init_strategy=init_map, zero_state=zero_state,
-                                      mutual_intensity_path=mi_path, base_intensity_path=bi_path)
-    AttentionBasedModel(model_config)
+    model_config = ModelConfiguration(learning_rate=0.001, batch_size=batch_size, x_depth=x_depth, t_depth=t_depth,
+                                      time_stamps=time_stamps, num_hidden=num_hidden, cell_type='revised_gru',
+                                      summary_save_path=save_path, c_r_ratio=1, activation=activation,
+                                      init_strategy=init_map, zero_state=zero_state, mutual_intensity_path=mi_path,
+                                      base_intensity_path=bi_path)
+    attention_model = AttentionBasedModel(model_config)
     init = tf.global_variables_initializer()
+
+    x = np.random.normal(0, 1, [batch_count, time_stamps, batch_size, x_depth])
+    t = np.random.normal(0, 1, [batch_count, time_stamps, batch_size, t_depth])
 
     with tf.Session() as sess:
         sess.run(init)
         train_writer = tf.summary.FileWriter(save_path, sess.graph)
+        for i in range(0, batch_count):
+            input_x = x[i]
+            input_t = t[i]
+            merge, _ = sess.run([attention_model.merge_summary, attention_model.optimize],
+                                feed_dict={attention_model.input_data_x: input_x,
+                                           attention_model.input_data_t: input_t})
+            train_writer.add_summary(merge, i)
 
 
 if __name__ == "__main__":

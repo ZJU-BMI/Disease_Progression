@@ -52,12 +52,18 @@ class RevisedRNN(object):
 
         state = self.__zero_state
         states_list = list()
-        states_list.append(state)
+
+        # zero state append
+        with tf.name_scope('zero_state'):
+            state_expand = tf.convert_to_tensor(state, dtype=tf.float64)
+            state_expand = tf.tile(state_expand, [self.__batch_size])
+            state_expand = tf.reshape(state_expand, [self.__batch_size, -1])
+        states_list.append(tf.convert_to_tensor(state_expand, dtype=tf.float64))
         with tf.name_scope('rnn_states'):
             input_x = tf.unstack(input_x, axis=0, name='unstack_x')
             input_t = tf.unstack(input_t, axis=0, name='unstack_t')
 
-            for i in range(0, self.__time_stamp):
+            for i in range(0, self.__time_stamp - 1):
                 with tf.name_scope('revised_gru'):
                     step_i_x = input_x[i]
                     step_i_t = input_t[i]
@@ -103,8 +109,8 @@ def main():
     x = np.random.normal(0, 1, [8, 2, 4], )
     t = np.random.normal(0, 1, [8, 2, 1])
 
-    placeholder_x = tf.placeholder('float', shape=[8, 2, 4], name='input_x', dtype=tf.float64)
-    placeholder_t = tf.placeholder('float', shape=[8, 2, 1], name='input_t', dtype=tf.float64)
+    placeholder_x = tf.placeholder(shape=[8, 2, 4], name='input_x', dtype=tf.float64)
+    placeholder_t = tf.placeholder(shape=[8, 2, 1], name='input_t', dtype=tf.float64)
 
     zero_state = np.random.normal(0, 1, [5, ])
     revised_rnn = RevisedRNN(time_stamp=8, batch_size=2, x_depth=4, t_depth=1, hidden_state=5,
