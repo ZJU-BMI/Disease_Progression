@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import tensorflow as tf
 
@@ -8,7 +10,7 @@ import rnn
 class ModelConfiguration(object):
     def __init__(self, learning_rate, batch_size, x_depth, time_stamps, num_hidden, cell_type, summary_save_path,
                  c_r_ratio, activation, init_strategy, mutual_intensity_path, base_intensity_path, zero_state,
-                 file_encoding, t_depth=1):
+                 file_encoding, time_decay_function, t_depth=1):
         """
         :param learning_rate: should be a scalar
         :param batch_size: the size of minibatch, a scalar
@@ -27,6 +29,9 @@ class ModelConfiguration(object):
         :param mutual_intensity_path: a file path, reading the information of mutual intensity
         :param base_intensity_path: a file path, reading the information of base intensity
         :param file_encoding: intensity file encoding
+        :param time_decay_function: which is long (at least 10,000 elements) 1-d np.ndarray, each entry indicates the
+        intensity
+        of corresponding time stamps
         """
         # Tensorboard Data And Output Save Path
         self.model_summary_save_path = summary_save_path
@@ -34,6 +39,8 @@ class ModelConfiguration(object):
         # Training Parameters
         self.learning_rate = learning_rate
         self.batch_size = batch_size
+
+        self.time_decay_function = time_decay_function
 
         # Model Parameters
         self.c_r_ratio = c_r_ratio
@@ -81,6 +88,8 @@ class AttentionBasedModel(object):
         self.__base_intensity_path = model_config.base_intensity_path
         self.__file_encoding = model_config.file_encoding
 
+        self.__time_decay_function = model_config.time_decay_function
+
         # Output Parameters
         self.__c_weight = None
         self.__c_bias = None
@@ -116,7 +125,8 @@ class AttentionBasedModel(object):
                                                             name='intensity', placeholder_x=self.input_data_x,
                                                             placeholder_t=self.input_data_t,
                                                             file_encoding=self.__file_encoding,
-                                                            para_init_map=self.__init_strategy)
+                                                            para_init_map=self.__init_strategy,
+                                                            time_decay_function=self.__time_decay_function)
 
         attention_component = attention_mechanism.AttentionMechanism(revised_rnn, intensity_component)
         self.__c_weight, self.__c_bias, self.__r_weight, self.__r_bias = self.__output_parameter()
@@ -125,19 +135,22 @@ class AttentionBasedModel(object):
 
         output_mix_hidden_state = []
         with tf.name_scope('attention'):
-            for time_stamps in range(1, self.__time_stamps + 1):
+            for time_stamp in range(0, self.__time_stamps):
+                # we allow time_stamp can be zero because zero-state has output
                 with tf.name_scope('mix_state'):
                     with tf.name_scope('weight'):
-                        weight = attention_component(time_stamp=time_stamps)
+                        weight = attention_component(time_stamp=time_stamp)
                     with tf.name_scope('states'):
-                        hidden_states = tf.unstack(hidden_states_list)[0: time_stamps]
+                        hidden_states = tf.unstack(hidden_states_list)[0: time_stamp + 1]
                     state_list = []
-                    with tf.name_scope('state_mix'):
-                        for i in range(0, time_stamps):
-                            state_list.append(weight[i] * hidden_states[i])
+                    with tf.name_scope('mix'):
+                        with tf.name_scope('mix'):
+                            for i in range(0, time_stamp + 1):
+                                state_list.append(weight[i] * hidden_states[i])
                         state_list = tf.convert_to_tensor(state_list, tf.float64)
-                        mix_state = tf.reduce_sum(state_list, axis=0)
-                        output_mix_hidden_state.append(mix_state)
+                        with tf.name_scope('average'):
+                            mix_state = tf.reduce_sum(state_list, axis=0)
+                            output_mix_hidden_state.append(mix_state)
             output_mix_hidden_state = tf.convert_to_tensor(output_mix_hidden_state, dtype=tf.float64,
                                                            name='attention_states')
 
@@ -199,7 +212,9 @@ class AttentionBasedModel(object):
 
 
 def main():
-    save_path = "D:\\PythonProject\\DiseaseProgression\\src\\model\\train"
+    root_path = os.path.abspath('..\\..')
+
+    save_path = root_path + "\\src\\model\\train"
     activation = tf.tanh
     init_map = dict()
     init_map['gate_weight'] = tf.random_normal_initializer(0, 1)
@@ -212,6 +227,8 @@ def main():
     init_map['regression_bias'] = tf.random_normal_initializer(0, 1)
     init_map['mutual_intensity'] = tf.random_normal_initializer(0, 1)
     init_map['base_intensity'] = tf.random_normal_initializer(0, 1)
+    init_map['mutual_intensity'] = tf.random_normal_initializer(0, 1)
+    init_map['combine'] = tf.random_normal_initializer(0, 1)
 
     num_hidden = 3
     batch_size = 8
@@ -221,24 +238,30 @@ def main():
     batch_count = 5
     cell_type = 'revised_gru'
     zero_state = np.random.normal(0, 1, [num_hidden, ])
-    mi_path = "D:\\PythonProject\\DiseaseProgression\\resource\\mutual_intensity_sample.csv"
-    bi_path = "D:\\PythonProject\\DiseaseProgression\\resource\\base_intensity_sample.csv"
+
+    mi_path = root_path + "\\resource\\mutual_intensity_sample.csv"
+    bi_path = root_path + "\\resource\\base_intensity_sample.csv"
     file_encoding = 'utf-8-sig'
     c_r_ratio = 1
     learning_rate = 0.001
+
+    print(save_path)
+
+    # time decay由于日期是离散的，每一日的强度直接采用硬编码的形式写入
+    time_decay_function = np.random.normal(0, 1, [10000, ])
 
     model_config = ModelConfiguration(learning_rate=learning_rate, batch_size=batch_size, x_depth=x_depth,
                                       t_depth=t_depth, time_stamps=time_stamps, num_hidden=num_hidden,
                                       cell_type=cell_type, summary_save_path=save_path, c_r_ratio=c_r_ratio,
                                       activation=activation, init_strategy=init_map, zero_state=zero_state,
                                       mutual_intensity_path=mi_path, base_intensity_path=bi_path,
-                                      file_encoding=file_encoding)
+                                      file_encoding=file_encoding, time_decay_function=time_decay_function)
 
     attention_model = AttentionBasedModel(model_config)
     init = tf.global_variables_initializer()
 
-    x = np.random.normal(0, 1, [batch_count, time_stamps, batch_size, x_depth])
-    t = np.random.normal(0, 1, [batch_count, time_stamps, batch_size, t_depth])
+    x = np.random.random_integers(0, 2, [batch_count, time_stamps, batch_size, x_depth])
+    t = np.random.poisson(10, [batch_count, time_stamps, batch_size, t_depth])
 
     with tf.Session() as sess:
         sess.run(init)
