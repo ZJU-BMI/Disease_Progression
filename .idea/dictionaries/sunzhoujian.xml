@@ -1,11 +1,13 @@
 <component name="ProjectDictionaryState">
   <dictionary name="sunzhoujian">
     <words>
+      <w>arxiv</w>
       <w>backprop</w>
       <w>dataset</w>
       <w>diag</w>
       <w>dtype</w>
       <w>hawkes</w>
+      <w>hloss</w>
       <w>logits</w>
       <w>lstm</w>
       <w>minibatch</w>
@@ -13,14 +15,17 @@
       <w>mnist</w>
       <w>ndarray</w>
       <w>oper</w>
+      <w>prec</w>
       <w>pred</w>
       <w>relu</w>
       <w>softmax</w>
       <w>tanh</w>
       <w>tensorboard</w>
       <w>tensorflow</w>
+      <w>tkde</w>
       <w>unnormalized</w>
       <w>varscope</w>
+      <w>zhang</w>
     </words>
   </dictionary>
 </component>

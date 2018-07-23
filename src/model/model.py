@@ -1,6 +1,8 @@
+import csv
 import os
 
 import numpy as np
+import sklearn.metrics as sk_metric
 import tensorflow as tf
 
 import attention_mechanism
@@ -10,7 +12,7 @@ import rnn
 class ModelConfiguration(object):
     def __init__(self, learning_rate, batch_size, x_depth, time_stamps, num_hidden, cell_type, summary_save_path,
                  c_r_ratio, activation, init_strategy, mutual_intensity_path, base_intensity_path, zero_state,
-                 file_encoding, time_decay_function, t_depth=1):
+                 file_encoding, time_decay_function, t_depth=1, threshold=0.5):
         """
         :param learning_rate: should be a scalar
         :param batch_size: the size of minibatch, a scalar
@@ -30,15 +32,14 @@ class ModelConfiguration(object):
         :param base_intensity_path: a file path, reading the information of base intensity
         :param file_encoding: intensity file encoding
         :param time_decay_function: which is long (at least 10,000 elements) 1-d np.ndarray, each entry indicates the
-        intensity
-        of corresponding time stamps
+        intensity of corresponding time stamps
+        :param threshold: threshold for metrics
         """
         # Tensorboard Data And Output Save Path
         self.model_summary_save_path = summary_save_path
 
         # Training Parameters
         self.learning_rate = learning_rate
-        self.batch_size = batch_size
 
         self.time_decay_function = time_decay_function
 
@@ -60,6 +61,8 @@ class ModelConfiguration(object):
         self.base_intensity_path = base_intensity_path
         self.file_encoding = file_encoding
 
+        self.threshold = threshold
+
 
 class AttentionBasedModel(object):
     def __init__(self, model_config):
@@ -68,13 +71,13 @@ class AttentionBasedModel(object):
 
         # Training Parameters
         self.__learning_rate = model_config.learning_rate
-        self.__batch_size = model_config.batch_size
 
         # General Model Parameters
         self.__c_r_ratio = model_config.c_r_ratio
         self.__input_x_depth = model_config.input_x_depth
         self.__input_t_depth = model_config.input_t_depth
         self.__time_stamps = model_config.time_stamps
+        self.__threshold = model_config.threshold
 
         # Network Parameters
         self.__num_hidden = model_config.num_hidden
@@ -102,23 +105,25 @@ class AttentionBasedModel(object):
 
         # expose_node
         self.merge_summary = None
+        self.c_pred_node = None
+        self.r_pred_node = None
         self.optimize = None
 
         self.build()
 
     def build(self):
         with tf.name_scope('input_data'):
-            self.input_data_x = tf.placeholder('float64', shape=[self.__time_stamps, self.__batch_size,
+            self.input_data_x = tf.placeholder('float64', shape=[self.__time_stamps, None,
                                                                  self.__input_x_depth], name='input_x')
-            self.input_data_t = tf.placeholder('float64', shape=[self.__time_stamps, self.__batch_size,
+            self.input_data_t = tf.placeholder('float64', shape=[self.__time_stamps, None,
                                                                  self.__input_t_depth], name='input_t')
 
-        revised_rnn = rnn.RevisedRNN(time_stamp=self.__time_stamps, batch_size=self.__batch_size,
+        revised_rnn = rnn.RevisedRNN(time_stamp=self.__time_stamps,
                                      x_depth=self.__input_x_depth, t_depth=self.__input_t_depth,
                                      hidden_state=self.__num_hidden, init_strategy_map=self.__init_strategy,
                                      activation=self.__activation, zero_state=self.__zero_state,
                                      input_x=self.input_data_x, input_t=self.input_data_t)
-        intensity_component = attention_mechanism.Intensity(time_stamp=self.__time_stamps, batch_size=self.__batch_size,
+        intensity_component = attention_mechanism.Intensity(time_stamp=self.__time_stamps, batch_size=None,
                                                             x_depth=self.__input_x_depth, t_depth=self.__input_t_depth,
                                                             mutual_intensity_path=self.__mutual_intensity_path,
                                                             base_intensity_path=self.__base_intensity_path,
@@ -163,17 +168,21 @@ class AttentionBasedModel(object):
                     c_pred = tf.matmul(state, self.__c_weight) + self.__c_bias
                     c_pred_list.append(c_pred)
                 c_pred_list = tf.convert_to_tensor(c_pred_list)
+                self.c_pred_node = c_pred_list
             with tf.name_scope('r_output'):
                 for state in output_mix_hidden_state:
                     r_pred = tf.matmul(state, self.__r_weight) + self.__r_bias
                     r_pred_list.append(r_pred)
                 r_pred_list = tf.convert_to_tensor(r_pred_list)
+                self.r_pred_node = r_pred_list
 
         with tf.name_scope('normal_pred'):
             self.__performance_measure(c_pred_list, r_pred_list)
 
         with tf.name_scope('loss'):
             with tf.name_scope('c_loss'):
+                # we use the binary entropy loss function proposed in Large-scale Multi-label Text Classification -
+                # Revisiting Neural Networks, arxiv.org/pdf/1312.5419
                 c_loss = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.input_data_x,
                                                                                logits=c_pred_list))
             with tf.name_scope('r_loss'):
@@ -206,9 +215,99 @@ class AttentionBasedModel(object):
                                      initializer=self.__init_strategy["regression_bias"], dtype=tf.float64)
         return c_weight, c_bias, r_weight, r_bias
 
-    def __performance_measure(self, c_pred_list, r_pred_list):
-        # TODO, 加一个分门别类的测试精度，需要包括Recall, Specific, AUC, PR等
-        pass
+    def __performance_measure(self, c_pred, r_pred):
+        # performance metrics are obtained based on A Review on Multi-Label Learning Algorithms,
+        # Zhang et al, TKDE, 2014
+        c_label = tf.cast(self.input_data_x, dtype=tf.bool)
+        r_label = self.input_data_t
+
+        c_auxiliary_one = tf.cast(tf.ones(c_pred.shape, dtype=tf.int8), dtype=tf.bool)
+        c_auxiliary_zero = tf.cast(tf.zeros(c_pred.shape, dtype=tf.int8), dtype=tf.bool)
+        c_pred_label = tf.where(c_pred > self.__threshold, c_auxiliary_one, c_auxiliary_zero)
+        with tf.name_scope('acc'):
+            acc = tf.reduce_sum(tf.cast(tf.logical_and(c_pred_label, c_label), dtype=tf.float32)) / \
+                  tf.reduce_sum(tf.cast(tf.logical_or(c_pred_label, c_label), dtype=tf.float32))
+            tf.summary.scalar('c_accuracy', acc)
+        with tf.name_scope('precision'):
+            precision = tf.reduce_sum(tf.cast(tf.logical_and(c_pred_label, c_label), dtype=tf.float32)) / \
+                        tf.reduce_sum(tf.cast(c_pred_label, dtype=tf.float32))
+            tf.summary.scalar('c_precision', precision)
+        with tf.name_scope('recall'):
+            recall = tf.reduce_sum(tf.cast(tf.logical_and(c_pred_label, c_label), dtype=tf.float32)) / \
+                     tf.reduce_sum(tf.cast(c_label, dtype=tf.float32))
+            tf.summary.scalar('c_recall', recall)
+        with tf.name_scope('f1'):
+            f_1 = precision * recall / (precision + recall)
+            tf.summary.scalar('c_f_1', f_1)
+        with tf.name_scope('hloss'):
+            denominator = (c_label.shape[0] * c_label.shape[1] * c_label.shape[2]).value
+            difference = tf.cast(tf.logical_xor(c_label, c_pred_label), dtype=tf.float32)
+            hamming_loss = tf.reduce_sum(difference) / denominator
+            tf.summary.scalar('hamming_loss', hamming_loss)
+
+        with tf.name_scope('time_dev'):
+            time_dev = tf.reduce_mean(tf.abs(r_pred - r_label))
+            tf.summary.scalar('abs_time_deviation', time_dev)
+
+
+def performance_measure(c_pred, r_pred, c_label, r_label, time_stamp, batch_size, input_depth, threshold):
+    # performance metrics are obtained based on A Review on Multi-Label Learning Algorithms,
+    # Zhang et al, TKDE, 2014
+    c_auxiliary_one = np.ones(c_pred.shape)
+    c_auxiliary_zero = np.zeros(c_pred.shape)
+    c_pred_label = np.where(c_pred > threshold, c_auxiliary_one, c_auxiliary_zero)
+
+    acc = np.sum(np.logical_and(c_pred_label, c_label)) / np.sum(np.logical_or(c_pred_label, c_label))
+    precision = np.sum(np.logical_and(c_pred_label, c_label)) / np.sum(c_pred_label)
+    recall = np.sum(np.logical_and(c_pred_label, c_label)) / np.sum(c_label)
+    f_1 = precision * recall / (precision + recall)
+
+    # hamming loss
+    denominator = c_label.shape[0] * c_label.shape[1] * c_label.shape[2]
+    difference = np.logical_xor(c_pred_label, c_label)
+    hamming_loss = np.sum(difference) / denominator
+
+    c_label = np.reshape(c_label, [time_stamp * batch_size, input_depth])
+    c_pred_label = np.reshape(c_pred_label, [time_stamp * batch_size, input_depth])
+    coverage = sk_metric.coverage_error(c_label, c_pred_label)
+    rank_loss = sk_metric.label_ranking_loss(c_label, c_pred_label)
+    average_precision = sk_metric.average_precision_score(c_label, c_pred_label)
+    macro_auc = sk_metric.roc_auc_score(c_label, c_pred_label, average='macro')
+    micro_auc = sk_metric.roc_auc_score(c_label, c_pred_label, average='micro')
+    time_dev = np.sum(np.abs(r_pred - r_label))
+
+    metrics_map = {'acc': acc, 'precision': precision, 'recall': recall, 'f1': f_1, 'hamming_loss': hamming_loss,
+                   'coverage': coverage, 'ranking_loss': rank_loss, 'average_precision': average_precision,
+                   'macro_auc': macro_auc, 'micro_auc': micro_auc, 'absolute_time_deviation': time_dev}
+    return metrics_map
+
+
+def save_result(path, file_name, data):
+    matrix_to_write = []
+    head = ['epoch', 'batch', 'acc', 'precision', 'recall', 'f1', 'hamming_loss', 'coverage', 'ranking_loss',
+            'average_precision', 'macro_auc', 'micro_auc', 'absolute_time_deviation']
+    matrix_to_write.append(head)
+    for item in data:
+        epoch = item[0]
+        batch = item[1]
+        acc = item[2]['acc']
+        precision = item[2]['precision']
+        recall = item[2]['recall']
+        f1 = item[2]['f1']
+        hamming_loss = item[2]['hamming_loss']
+        coverage = item[2]['coverage']
+        ranking_loss = item[2]['ranking_loss']
+        average_precision = item[2]['average_precision']
+        macro_auc = item[2]['macro_auc']
+        micro_auc = item[2]['micro_auc']
+        absolute_time_deviation = item[2]['absolute_time_deviation']
+        single_result = [epoch, batch, acc, precision, recall, f1, hamming_loss, coverage, ranking_loss,
+                         average_precision, macro_auc, micro_auc, absolute_time_deviation]
+        matrix_to_write.append(single_result)
+
+    with open(path + file_name, 'w', encoding='utf-8-sig', newline="") as file:
+        csv_writer = csv.writer(file)
+        csv_writer.writerows(matrix_to_write)
 
 
 def main():
@@ -235,7 +334,6 @@ def main():
     x_depth = 6
     t_depth = 1
     time_stamps = 4
-    batch_count = 5
     cell_type = 'revised_gru'
     zero_state = np.random.normal(0, 1, [num_hidden, ])
 
@@ -243,7 +341,12 @@ def main():
     bi_path = root_path + "\\resource\\base_intensity_sample.csv"
     file_encoding = 'utf-8-sig'
     c_r_ratio = 1
-    learning_rate = 0.001
+    threshold = 0.01
+    learning_rate = 10
+
+    epoch = 100
+    train_batch_count = 5
+    test_batch_count = 5
 
     print(save_path)
 
@@ -260,19 +363,29 @@ def main():
     attention_model = AttentionBasedModel(model_config)
     init = tf.global_variables_initializer()
 
-    x = np.random.random_integers(0, 2, [batch_count, time_stamps, batch_size, x_depth])
-    t = np.random.poisson(10, [batch_count, time_stamps, batch_size, t_depth])
+    train_x = np.random.random_integers(0, 1, [train_batch_count, time_stamps, batch_size, x_depth])
+    train_t = np.random.poisson(10, [train_batch_count, time_stamps, batch_size, t_depth])
 
+    performance_list = []
     with tf.Session() as sess:
         sess.run(init)
         train_writer = tf.summary.FileWriter(save_path, sess.graph)
-        for i in range(0, batch_count):
-            input_x = x[i]
-            input_t = t[i]
-            merge, _ = sess.run([attention_model.merge_summary, attention_model.optimize],
-                                feed_dict={attention_model.input_data_x: input_x,
-                                           attention_model.input_data_t: input_t})
-            train_writer.add_summary(merge, i)
+        for i in range(0, epoch):
+            for j in range(0, train_batch_count):
+                input_x = train_x[j]
+                input_t = train_t[j]
+                merge, _ = sess.run([attention_model.merge_summary, attention_model.optimize],
+                                    feed_dict={attention_model.input_data_x: input_x,
+                                               attention_model.input_data_t: input_t})
+                train_writer.add_summary(merge, j)
+
+                c_pred, r_pred = sess.run([attention_model.c_pred_node, attention_model.r_pred_node],
+                                          feed_dict={attention_model.input_data_x: input_x,
+                                                     attention_model.input_data_t: input_t})
+                metrics_map = performance_measure(c_pred, r_pred, input_x, input_t, time_stamps, batch_size,
+                                                  x_depth, threshold)
+                performance_list.append([i, j, metrics_map])
+        save_result(save_path, '\\training_result.csv', performance_list)
 
 
 if __name__ == "__main__":

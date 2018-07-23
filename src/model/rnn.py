@@ -5,11 +5,10 @@ import revised_rnn_cell
 
 
 class RevisedRNN(object):
-    def __init__(self, time_stamp, batch_size, x_depth, t_depth, hidden_state, init_strategy_map,
+    def __init__(self, time_stamp, x_depth, t_depth, hidden_state, init_strategy_map,
                  activation, zero_state, input_x, input_t):
         """
         :param time_stamp: scalar
-        :param batch_size: scalar, the number of batch_size, should be assigned explicitly
         :param x_depth: scalar, the dimension of x
         :param t_depth: scalar, the dimension of t, should be 1
         :param hidden_state: scalar
@@ -17,11 +16,10 @@ class RevisedRNN(object):
         'gate_bias', 'candidate_weight', 'candidate_bias'. each key corresponds to a tf.Variable initializer
         :param activation: a function object
         :param zero_state: the zero state of rnn
-        :param input_x: a tf.placeholder of input_x, with size [time_steps, batch_size, x_depth] dtype=tf.float64
-        :param input_t: a tf.placeholder of input_t, with size [time_steps, batch_size, t_depth] dtype=tf.float64
+        :param input_x: a tf.placeholder of input_x, with size [time_steps, None, x_depth] dtype=tf.float64
+        :param input_t: a tf.placeholder of input_t, with size [time_steps, None, t_depth] dtype=tf.float64
         """
         self.__time_stamp = time_stamp
-        self.__batch_size = batch_size
         self.__x_depth = x_depth
         self.__t_depth = t_depth
         self.__hidden_state = hidden_state
@@ -53,12 +51,6 @@ class RevisedRNN(object):
         state = self.__zero_state
         states_list = list()
 
-        # zero state append
-        with tf.name_scope('zero_state'):
-            state_expand = tf.convert_to_tensor(state, dtype=tf.float64)
-            state_expand = tf.tile(state_expand, [self.__batch_size])
-            state_expand = tf.reshape(state_expand, [self.__batch_size, -1])
-        states_list.append(tf.convert_to_tensor(state_expand, dtype=tf.float64))
         with tf.name_scope('rnn_states'):
             input_x = tf.unstack(input_x, axis=0, name='unstack_x')
             input_t = tf.unstack(input_t, axis=0, name='unstack_t')
@@ -90,11 +82,11 @@ class RevisedRNN(object):
         input_x_shape = input_x.shape
         input_t_shape = input_t.shape
 
-        if len(input_x_shape.dims) != 3 or input_x_shape[0].value != self.__time_stamp or input_x_shape[1].value != \
-                self.__batch_size or input_x_shape[2] != self.__x_depth:
+        if len(input_x_shape.dims) != 3 or input_x_shape[0].value != self.__time_stamp or \
+                input_x_shape[2] != self.__x_depth:
             raise ValueError('input_x shape error')
-        if len(input_t_shape.dims) != 3 or input_t_shape[0].value != self.__time_stamp or input_t_shape[1].value != \
-                self.__batch_size or input_t_shape[2] != self.__t_depth:
+        if len(input_t_shape.dims) != 3 or input_t_shape[0].value != self.__time_stamp or \
+                input_t_shape[2] != self.__t_depth:
             raise ValueError('input_y shape error')
 
 
@@ -109,11 +101,11 @@ def main():
     x = np.random.normal(0, 1, [8, 2, 4], )
     t = np.random.normal(0, 1, [8, 2, 1])
 
-    placeholder_x = tf.placeholder(shape=[8, 2, 4], name='input_x', dtype=tf.float64)
-    placeholder_t = tf.placeholder(shape=[8, 2, 1], name='input_t', dtype=tf.float64)
+    placeholder_x = tf.placeholder(shape=[8, None, 4], name='input_x', dtype=tf.float64)
+    placeholder_t = tf.placeholder(shape=[8, None, 1], name='input_t', dtype=tf.float64)
 
     zero_state = np.random.normal(0, 1, [5, ])
-    revised_rnn = RevisedRNN(time_stamp=8, batch_size=2, x_depth=4, t_depth=1, hidden_state=5,
+    revised_rnn = RevisedRNN(time_stamp=8, x_depth=4, t_depth=1, hidden_state=5,
                              init_strategy_map=init_map, activation=tf.tanh, zero_state=zero_state,
                              input_t=placeholder_t, input_x=placeholder_x)
     init = tf.global_variables_initializer()
