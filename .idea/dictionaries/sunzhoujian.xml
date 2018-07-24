@@ -18,6 +18,7 @@
       <w>prec</w>
       <w>pred</w>
       <w>relu</w>
+      <w>rgru</w>
       <w>softmax</w>
       <w>tanh</w>
       <w>tensorboard</w>

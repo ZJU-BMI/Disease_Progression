@@ -312,8 +312,8 @@ def save_result(path, file_name, data):
 
 def main():
     root_path = os.path.abspath('..\\..')
-
     save_path = root_path + "\\src\\model\\train"
+
     activation = tf.tanh
     init_map = dict()
     init_map['gate_weight'] = tf.random_normal_initializer(0, 1)
