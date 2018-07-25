@@ -51,10 +51,11 @@ class ModelConfiguration(object):
 
 
 class TrainingConfiguration(object):
-    def __init__(self, learning_rate, optimizer, weight_decay, save_path, batch_size, iteration):
+    def __init__(self, learning_rate, optimizer, weight_decay, train_save_path, test_save_path, batch_size, iteration):
         self.learning_rate = learning_rate
         self.optimizer = optimizer
         self.weight_decay = weight_decay
-        self.save_path = save_path
+        self.train_save_path = train_save_path
+        self.test_save_path = test_save_path
         self.batch_size = batch_size
         self.iteration = iteration

@@ -96,14 +96,15 @@ class PredictionLayer(object):
         return c_loss, r_loss, c_pred_list, r_pred_list
 
 
+# TODO 在batch_size不定时无法使用，待解决
 def performance_summary(input_x, input_t, c_pred, r_pred, threshold):
     # performance metrics are obtained based on A Review on Multi-Label Learning Algorithms,
     # Zhang et al, TKDE, 2014
     c_label = tf.cast(input_x, dtype=tf.bool)
     r_label = input_t
 
-    c_auxiliary_one = tf.cast(tf.ones(c_pred.shape, dtype=tf.int8), dtype=tf.bool)
-    c_auxiliary_zero = tf.cast(tf.zeros(c_pred.shape, dtype=tf.int8), dtype=tf.bool)
+    c_auxiliary_one = tf.ones(c_pred.shape)
+    c_auxiliary_zero = tf.zeros(c_pred.shape)
     c_pred_label = tf.where(c_pred > threshold, c_auxiliary_one, c_auxiliary_zero)
     with tf.name_scope('acc'):
         acc = tf.reduce_sum(tf.cast(tf.logical_and(c_pred_label, c_label), dtype=tf.float32)) / \
@@ -168,7 +169,7 @@ def unit_test():
                                          c_r_ratio=c_r_ratio, activation=activation,
                                          init_strategy=init_map, zero_state=zero_state, mutual_intensity_path=mi_path,
                                          base_intensity_path=bi_path, file_encoding=file_encoding, init_map=init_map,
-                                         time_decay_function=time_decay_function)
+                                         time_decay_function=time_decay_function, threshold=threshold)
 
     # input define
     batch_size = 7

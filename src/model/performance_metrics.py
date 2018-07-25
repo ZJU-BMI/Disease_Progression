@@ -5,7 +5,7 @@ import numpy as np
 import sklearn.metrics as sk_metric
 
 
-def performance_measure(c_pred, r_pred, c_label, r_label, time_stamp, batch_size, input_depth, threshold):
+def performance_measure(c_pred, r_pred, c_label, r_label, max_time, batch_size, input_depth, threshold):
     # performance metrics are obtained based on A Review on Multi-Label Learning Algorithms,
     # Zhang et al, TKDE, 2014
     c_auxiliary_one = np.ones(c_pred.shape)
@@ -22,8 +22,8 @@ def performance_measure(c_pred, r_pred, c_label, r_label, time_stamp, batch_size
     difference = np.logical_xor(c_pred_label, c_label)
     hamming_loss = np.sum(difference) / denominator
 
-    c_label = np.reshape(c_label, [time_stamp * batch_size, input_depth])
-    c_pred_label = np.reshape(c_pred_label, [time_stamp * batch_size, input_depth])
+    c_label = np.reshape(c_label, [max_time * batch_size, input_depth])
+    c_pred_label = np.reshape(c_pred_label, [max_time * batch_size, input_depth])
     coverage = sk_metric.coverage_error(c_label, c_pred_label)
     rank_loss = sk_metric.label_ranking_loss(c_label, c_pred_label)
     average_precision = sk_metric.average_precision_score(c_label, c_pred_label)

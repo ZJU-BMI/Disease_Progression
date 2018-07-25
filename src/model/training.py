@@ -1,13 +1,14 @@
 # coding=utf-8
+import datetime
 import os
 
 import numpy as np
-import sklearn.metrics as sk_metric
 import tensorflow as tf
 
 import attention_mechanism
 import configuration as config
 import intensity
+import performance_metrics as pm
 import prediction
 import revised_rnn
 
@@ -17,7 +18,6 @@ class ModelEvaluate(object):
         self.learning_rate = training_config.learning_rate
         self.optimizer = training_config.optimizer
         self.weight_decay = training_config.weight_decay
-        self.save_path = training_config.save_path
         self.batch_size = training_config.batch_size
         self.iteration = training_config.iteration
         self.model_config = model_config
@@ -58,8 +58,8 @@ class ModelEvaluate(object):
         mix_state_list = attention_layer(input_x=placeholder_x, input_t=placeholder_t)
         c_loss, r_loss, c_pred_list, r_pred_list = prediction_layer(mix_hidden_state_list=mix_state_list,
                                                                     input_x=placeholder_x, input_t=placeholder_t)
-        prediction.performance_summary(input_x=placeholder_x, input_t=placeholder_t, c_pred=c_pred_list,
-                                       r_pred=r_pred_list, threshold=model_configuration.threshold)
+        # prediction.performance_summary(input_x=placeholder_x, input_t=placeholder_t, c_pred=c_pred_list,
+        #                                r_pred=r_pred_list, threshold=model_config.threshold)
 
         merged_summary = tf.summary.merge_all()
 
@@ -69,38 +69,6 @@ class ModelEvaluate(object):
         self.r_pred_list = r_pred_list
         self.merged_summary = merged_summary
         return c_loss, r_loss, c_pred_list, r_pred_list, merged_summary
-
-    @staticmethod
-    def performance_measure(c_pred, r_pred, c_label, r_label, time_stamp, batch_size, input_depth, threshold):
-        # performance metrics are obtained based on A Review on Multi-Label Learning Algorithms,
-        # Zhang et al, TKDE, 2014
-        c_auxiliary_one = np.ones(c_pred.shape)
-        c_auxiliary_zero = np.zeros(c_pred.shape)
-        c_pred_label = np.where(c_pred > threshold, c_auxiliary_one, c_auxiliary_zero)
-
-        acc = np.sum(np.logical_and(c_pred_label, c_label)) / np.sum(np.logical_or(c_pred_label, c_label))
-        precision = np.sum(np.logical_and(c_pred_label, c_label)) / np.sum(c_pred_label)
-        recall = np.sum(np.logical_and(c_pred_label, c_label)) / np.sum(c_label)
-        f_1 = precision * recall / (precision + recall)
-
-        # hamming loss
-        denominator = c_label.shape[0] * c_label.shape[1] * c_label.shape[2]
-        difference = np.logical_xor(c_pred_label, c_label)
-        hamming_loss = np.sum(difference) / denominator
-
-        c_label = np.reshape(c_label, [time_stamp * batch_size, input_depth])
-        c_pred_label = np.reshape(c_pred_label, [time_stamp * batch_size, input_depth])
-        coverage = sk_metric.coverage_error(c_label, c_pred_label)
-        rank_loss = sk_metric.label_ranking_loss(c_label, c_pred_label)
-        average_precision = sk_metric.average_precision_score(c_label, c_pred_label)
-        macro_auc = sk_metric.roc_auc_score(c_label, c_pred_label, average='macro')
-        micro_auc = sk_metric.roc_auc_score(c_label, c_pred_label, average='micro')
-        time_dev = np.sum(np.abs(r_pred - r_label))
-
-        metrics_map = {'acc': acc, 'precision': precision, 'recall': recall, 'f1': f_1, 'hamming_loss': hamming_loss,
-                       'coverage': coverage, 'ranking_loss': rank_loss, 'average_precision': average_precision,
-                       'macro_auc': macro_auc, 'micro_auc': micro_auc, 'absolute_time_deviation': time_dev}
-        return metrics_map
 
 
 def configuration_set():
@@ -146,16 +114,24 @@ def configuration_set():
     learning_rate = 0.1
     optimizer = tf.train.AdamOptimizer
     weight_decay = 0.0001
-    save_path = root_path
-    batch_size = 8
+
+    now_time = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+    train_save_path = root_path + '\\model_evaluate\\train\\' + now_time + "\\"
+    test_save_path = root_path + '\\model_evaluate\\test\\' + now_time + "\\"
+    os.makedirs(train_save_path)
+    os.makedirs(test_save_path)
+    batch_size = None
     iteration = 20
     train_config = config.TrainingConfiguration(learning_rate=learning_rate, optimizer=optimizer,
-                                                weight_decay=weight_decay, save_path=save_path, batch_size=batch_size,
+                                                weight_decay=weight_decay, train_save_path=train_save_path,
+                                                test_save_path=test_save_path, batch_size=batch_size,
                                                 iteration=iteration)
+    print(train_save_path)
+    print(test_save_path)
     return train_config, model_config
 
 
-def training(train_config, model_config, data):
+def training(train_config, model_config):
     # input define
     max_time_stamp = model_config.max_time_stamp
     batch_size = train_config.batch_size
@@ -164,27 +140,59 @@ def training(train_config, model_config, data):
 
     placeholder_x = tf.placeholder('float64', [max_time_stamp, batch_size, x_depth])
     placeholder_t = tf.placeholder('float64', [max_time_stamp, batch_size, t_depth])
-    model = ModelEvaluate(training_config=training_configuration, model_config=model_configuration)
+    model = ModelEvaluate(training_config=train_config, model_config=model_config)
     c_loss, r_loss, c_pred_list, r_pred_list, merged_summary = model(input_x=placeholder_x, input_t=placeholder_t)
-    loss_sum = c_loss + model_configuration.c_r_ratio * r_loss
-    optimize_node = training_configuration.optimizer(training_configuration.learning_rate).minimize(loss_sum)
+    loss_sum = c_loss + model_config.c_r_ratio * r_loss
+    optimize_node = train_config.optimizer(train_config.learning_rate).minimize(loss_sum)
     initializer = tf.global_variables_initializer()
 
     # data define
-    # TODO 最好使用next batch的办法解决
+    # TODO 建立data class，把所有的数据输入的问题全部封装
     epoch = 4
     batch_count = 3
-    x = np.random.normal(0, 1, [batch_count, max_time_stamp, batch_size, x_depth])
-    t = np.random.normal(0, 1, [batch_count, max_time_stamp, batch_size, t_depth])
+    actual_batch_size = 10
+    actual_test_size = 30
+    train_x = np.random.random_integers(0, 1, [batch_count, max_time_stamp, actual_batch_size, x_depth])
+    train_t = np.random.random_integers(0, 1, [batch_count, max_time_stamp, actual_batch_size, t_depth])
+    test_x = np.random.random_integers(0, 1, [max_time_stamp, actual_test_size, x_depth])
+    test_t = np.random.random_integers(0, 1, [max_time_stamp, actual_test_size, t_depth])
+
+    train_metric_list = list()
+    test_metric_list = list()
+
     with tf.Session() as sess:
+        tf.summary.FileWriter(train_config.train_save_path, sess.graph)
+        tf.summary.FileWriter(train_config.test_save_path, sess.graph)
         sess.run(initializer)
+
         for i in range(0, epoch):
             for j in range(0, batch_count):
-                sess.run([optimize_node], feed_dict={placeholder_x: x[j], placeholder_t: t[j]})
-            c_pred, r_pred, summary = sess.run([c_pred_list, r_pred_list, merged_summary],
-                                               feed_dict={placeholder_x: x[j], placeholder_t: t[j]})
+                sess.run([optimize_node], feed_dict={placeholder_x: train_x[j], placeholder_t: train_t[j]})
+                c_pred, r_pred = sess.run([c_pred_list, r_pred_list],
+                                          feed_dict={placeholder_x: train_x[j], placeholder_t: train_t[j]})
+                # TODO 在解决prediction的问题之前，暂时不用summary
+                # train_summary.add_summary(summary)
+                metric_result = pm.performance_measure(c_pred, r_pred, train_x[j], train_t[j],
+                                                       model_config.max_time_stamp, actual_batch_size,
+                                                       model_config.input_x_depth, model_config.threshold)
+                train_metric_list.append([i, j, metric_result])
+
+            c_pred, r_pred = sess.run([c_pred_list, r_pred_list],
+                                      feed_dict={placeholder_x: test_x, placeholder_t: test_t})
+            metric_result = pm.performance_measure(c_pred, r_pred, test_x, test_t, model_config.max_time_stamp,
+                                                   actual_test_size, model_config.input_x_depth,
+                                                   model_config.threshold)
+            test_metric_list.append([i, None, metric_result])
+            # test_summary.add_summary(summary)
+
+        pm.save_result(train_config.train_save_path, 'train_result.csv', train_metric_list)
+        pm.save_result(train_config.test_save_path, 'test_result.csv', test_metric_list)
+
+
+def main():
+    training_configuration, model_configuration = configuration_set()
+    training(training_configuration, model_configuration)
 
 
 if __name__ == '__main__':
-    training_configuration, model_configuration = configuration_set()
-    training(training_configuration, model_configuration, None)
+    main()
