@@ -137,7 +137,7 @@ def unit_test():
                                          c_r_ratio=c_r_ratio, activation=activation,
                                          init_strategy=init_map, zero_state=zero_state, mutual_intensity_path=mi_path,
                                          base_intensity_path=bi_path, file_encoding=file_encoding, init_map=init_map,
-                                         time_decay_function=time_decay_function, threshold=threshold)
+                                         time_decay_function=time_decay_function)
 
     # feed data with different batch_size
     x_1 = np.random.random_integers(0, 1, [max_time_stamp, 3, x_depth])

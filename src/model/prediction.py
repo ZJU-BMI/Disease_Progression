@@ -17,7 +17,6 @@ class AttentionMixLayer(object):
         self.__input_x_depth = model_configuration.input_x_depth
         self.__input_t_depth = model_configuration.input_t_depth
         self.__max_time_stamp = model_configuration.max_time_stamp
-        self.__threshold = model_configuration.threshold
         self.__num_hidden = model_configuration.num_hidden
         self.__init_map = model_configuration.init_map
 
@@ -169,7 +168,7 @@ def unit_test():
                                          c_r_ratio=c_r_ratio, activation=activation,
                                          init_strategy=init_map, zero_state=zero_state, mutual_intensity_path=mi_path,
                                          base_intensity_path=bi_path, file_encoding=file_encoding, init_map=init_map,
-                                         time_decay_function=time_decay_function, threshold=threshold)
+                                         time_decay_function=time_decay_function)
 
     # input define
     batch_size = 7

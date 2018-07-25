@@ -4,7 +4,7 @@
 class ModelConfiguration(object):
     def __init__(self, x_depth, max_time_stamp, num_hidden, cell_type, init_map,
                  c_r_ratio, activation, init_strategy, mutual_intensity_path, base_intensity_path, zero_state,
-                 file_encoding, time_decay_function, threshold, t_depth):
+                 file_encoding, time_decay_function, t_depth, threshold):
         """
         :param x_depth: defines the dimension of the input_x in a specific time stamp, it also indicates the number
         of type of event
@@ -44,10 +44,10 @@ class ModelConfiguration(object):
         self.mutual_intensity_path = mutual_intensity_path
         self.base_intensity_path = base_intensity_path
         self.file_encoding = file_encoding
-        self.threshold = threshold
 
         # parameter initializer
         self.init_map = init_map
+        self.threshold = threshold
 
 
 class TrainingConfiguration(object):
