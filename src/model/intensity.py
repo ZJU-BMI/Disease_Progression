@@ -5,13 +5,13 @@ import numpy as np
 
 
 class Intensity(object):
-    def __init__(self, event_number, mutual_intensity_path, base_intensity_path, file_encoding):
-        self.__file_encoding = file_encoding
-        self.__event_number = event_number
+    def __init__(self, model_configuration):
+        self.__file_encoding = model_configuration.file_encoding
+        self.__event_number = model_configuration.input_x_depth
 
         # get_intensity
-        self.__mutual_intensity_path = mutual_intensity_path
-        self.__base_intensity_path = base_intensity_path
+        self.__mutual_intensity_path = model_configuration.mutual_intensity_path
+        self.__base_intensity_path = model_configuration.base_intensity_path
         self.__base_intensity = self.__read_base_intensity()
         self.__mutual_intensity = self.__read_mutual_intensity()
 

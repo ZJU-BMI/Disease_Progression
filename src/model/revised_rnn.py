@@ -4,36 +4,39 @@ import os
 import numpy as np
 import tensorflow as tf
 
+import configuration
 import revised_rnn_cell as rrc
 
 
 class RevisedRNN(object):
-    def __init__(self, time_stamp, x_depth, t_depth, hidden_state, init_map, activation, zero_state, cell_type):
+    def __init__(self, model_configuration):
         """
-        :param time_stamp: scalar, length of rnn
-        :param x_depth: scalar, the dimension of x
-        :param t_depth: scalar, the dimension of t, should be 1
-        :param hidden_state: scalar
-        :param init_map: parameter strategy map, at least contain 4 elements with key 'gate_weight',
+        :param: model_configuration contain variables as listed
+        time_stamp: scalar, length of rnn
+        x_depth: scalar, the dimension of x
+        t_depth: scalar, the dimension of t, should be 1
+        hidden_state: scalar
+        init_map: parameter strategy map, at least contain 4 elements with key 'gate_weight',
         'gate_bias', 'candidate_weight', 'candidate_bias'. each key corresponds to a tf.Variable initializer
-        :param activation: a function object
-        :param zero_state: the zero state of rnn with size [hidden_state]
-        :param cell_type: default revised_gru
+        activation: a function object
+        zero_state: the zero state of rnn with size [hidden_state]
+        cell_type: default revised_gru
         """
-        self.__time_stamp = time_stamp
-        self.__x_depth = x_depth
-        self.__t_depth = t_depth
-        self.__hidden_state = hidden_state
-        self.__init_map = init_map
-        self.__zero_state = zero_state
-        self.__activation = activation
+        self.__time_stamp = model_configuration.max_time_stamp
+        self.__x_depth = model_configuration.input_x_depth
+        self.__t_depth = model_configuration.input_t_depth
+        self.__hidden_state = model_configuration.num_hidden
+        self.__init_map = model_configuration.init_map
+        self.__zero_state = model_configuration.zero_state
+        self.__activation = model_configuration.activation
+        self.__cell_type = model_configuration.cell_type
 
         # TODO 如果今后有时间，继续把LSTM等其他Gated Cell修改为可以直接输入Time的形式
         # 如果真的这么做了，则需要抽象出一个revised rnn cell的基类，对revised rnn提供统一接口，
         # 留待以后有空了做
-        if cell_type != 'revised_gru':
+        if self.__cell_type != 'revised_gru':
             raise ValueError('other type unsupported yet')
-        self.__rnn_cell = cell_type
+        self.__rnn_cell = self.__cell_type
         self.__build()
 
         print('initialize rnn and build network accomplished')
@@ -98,31 +101,54 @@ class RevisedRNN(object):
 
 def unit_test():
     root_path = os.path.abspath('..\\..')
-    save_path = root_path + "\\src\\model\\train"
 
-    time_stamp = 5
-    batch_size = None
-    x_depth = 4
+    # model config
+    num_hidden = 3
+    x_depth = 6
     t_depth = 1
-    hidden_state = 16
-    placeholder_x = tf.placeholder(name='x', shape=[time_stamp, batch_size, x_depth], dtype=tf.float64)
-    placeholder_t = tf.placeholder(name='x', shape=[time_stamp, batch_size, t_depth], dtype=tf.float64)
-    zero_state = tf.convert_to_tensor(np.random.normal(0, 1, [hidden_state]))
-    init = dict()
-    init['gate_weight'] = tf.random_normal_initializer(0, 1)
-    init['gate_bias'] = tf.random_normal_initializer(0, 1)
-    init['candidate_weight'] = tf.random_normal_initializer(0, 1)
-    init['candidate_bias'] = tf.random_normal_initializer(0, 1)
+    max_time_stamp = 4
+    cell_type = 'revised_gru'
+    threshold = 0.5
+    zero_state = np.random.normal(0, 1, [num_hidden, ])
+    activation = tf.tanh
+    init_map = dict()
+    init_map['gate_weight'] = tf.random_normal_initializer(0, 1)
+    init_map['gate_bias'] = tf.random_normal_initializer(0, 1)
+    init_map['candidate_weight'] = tf.random_normal_initializer(0, 1)
+    init_map['candidate_bias'] = tf.random_normal_initializer(0, 1)
+    init_map['classification_weight'] = tf.random_normal_initializer(0, 1)
+    init_map['classification_bias'] = tf.random_normal_initializer(0, 1)
+    init_map['regression_weight'] = tf.random_normal_initializer(0, 1)
+    init_map['regression_bias'] = tf.random_normal_initializer(0, 1)
+    init_map['mutual_intensity'] = tf.random_normal_initializer(0, 1)
+    init_map['base_intensity'] = tf.random_normal_initializer(0, 1)
+    init_map['mutual_intensity'] = tf.random_normal_initializer(0, 1)
+    init_map['combine'] = tf.random_normal_initializer(0, 1)
+    mi_path = root_path + "\\resource\\mutual_intensity_sample.csv"
+    bi_path = root_path + "\\resource\\base_intensity_sample.csv"
+    file_encoding = 'utf-8-sig'
+    c_r_ratio = 1
+    # time decay由于日期是离散的，每一日的强度直接采用硬编码的形式写入
+    time_decay_function = np.random.normal(0, 1, [10000, ])
+
+    model_configuration = \
+        configuration.ModelConfiguration(x_depth=x_depth, t_depth=t_depth,
+                                         max_time_stamp=max_time_stamp, num_hidden=num_hidden, cell_type=cell_type,
+                                         c_r_ratio=c_r_ratio, activation=activation,
+                                         init_strategy=init_map, zero_state=zero_state, mutual_intensity_path=mi_path,
+                                         base_intensity_path=bi_path, file_encoding=file_encoding, init_map=init_map,
+                                         time_decay_function=time_decay_function, threshold=threshold)
 
     # feed data with different batch_size
-    x_1 = np.random.random_integers(0, 1, [time_stamp, 3, x_depth])
-    t_1 = np.random.random_integers(0, 1, [time_stamp, 3, t_depth])
-    x_2 = np.random.random_integers(0, 1, [time_stamp, 5, x_depth])
-    t_2 = np.random.random_integers(0, 1, [time_stamp, 5, t_depth])
+    x_1 = np.random.random_integers(0, 1, [max_time_stamp, 3, x_depth])
+    t_1 = np.random.random_integers(0, 1, [max_time_stamp, 3, t_depth])
+    x_2 = np.random.random_integers(0, 1, [max_time_stamp, 5, x_depth])
+    t_2 = np.random.random_integers(0, 1, [max_time_stamp, 5, t_depth])
 
-    revised_rnn = RevisedRNN(time_stamp=time_stamp, x_depth=x_depth, t_depth=t_depth, hidden_state=hidden_state,
-                             init_map=init, activation=tf.tanh, zero_state=zero_state, cell_type='revised_gru')
-
+    batch_size = None
+    revised_rnn = RevisedRNN(model_configuration=model_configuration)
+    placeholder_x = tf.placeholder('float64', [max_time_stamp, batch_size, x_depth])
+    placeholder_t = tf.placeholder('float64', [max_time_stamp, batch_size, t_depth])
     state_tensor = revised_rnn(input_x=placeholder_x, input_t=placeholder_t)
     init = tf.global_variables_initializer()
 
@@ -130,7 +156,6 @@ def unit_test():
         sess.run(init)
         sess.run(state_tensor, feed_dict={placeholder_x: x_1, placeholder_t: t_1})
         sess.run(state_tensor, feed_dict={placeholder_x: x_2, placeholder_t: t_2})
-        tf.summary.FileWriter(save_path, sess.graph)
 
 
 if __name__ == '__main__':

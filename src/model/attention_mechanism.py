@@ -1,84 +1,90 @@
 # coding=utf-8
+import os
+
+import numpy as np
 import tensorflow as tf
+
+import configuration
 
 
 class HawkesBasedAttentionLayer(object):
-    def __init__(self, x_depth, t_depth, name, init_map, time_decay_function):
+    def __init__(self, model_configuration):
         """
-        :param x_depth:
-        :param t_depth:
-        :param name:
-        :param init_map: should contain initializer with key mutual_intensity, combine
-        :param time_decay_function: should be a list with length at l0000, each entry indicates the intensity at
+        :param model_configuration contains
+        x_depth:
+        t_depth:
+        name:
+        init_map: should contain initializer with key mutual_intensity, combine
+        time_decay_function: should be a list with length at l0000, each entry indicates the intensity at
         corresponding(the entry's index) day
         """
-        self.__x_depth = x_depth
-        self.__t_depth = t_depth
-        self.__name = name
-        self.__init_map = init_map
-        self.__time_decay_function = tf.convert_to_tensor(time_decay_function, dtype=tf.float64)
-        self.__mutual_parameter = None
+        self.__x_depth = model_configuration.input_x_depth
+        self.__t_depth = model_configuration.input_t_depth
+        self.__name = 'hawkes_based_attention'
+        self.__init_map = model_configuration.init_map
+        self.__time_decay_function = tf.convert_to_tensor(model_configuration.time_decay_function, dtype=tf.float64)
+        self.__mutual_parameter = None  # with size [x_depth, 1]
 
         self.__init_argument_validation()
         self.__attention_parameter()
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, time_index, hidden_tensor, input_x, input_t, mutual_intensity):
         """
-        :param args:
-        :param kwargs:
-        :return:
-        """
-        self.__call_argument_validation(kwargs)
-        time_stamp = kwargs['time_stamp']
-        hidden_tensor = kwargs['hidden_tensor']
-        input_x = kwargs['input_x']
-        input_t = kwargs['input_t']
-        mutual_intensity = kwargs['mutual_intensity']
-        # base_intensity = kwargs['base_intensity'] base intensity unused
+        get the mixed hidden state under the process of attention mechanism
 
-        weight = self.__calc_weight(input_x, input_t, time_stamp, mutual_intensity)
+        :param time_index: the time index, the first hidden state (not zero state) will be defined as time_index=0
+        :param hidden_tensor: a hidden state tensor with size, [time_stamp, batch_size, hidden_state]
+        :param input_x: tensor with size [max_time_stamp, batch_size, x_depth]
+        :param input_t: tensor with size [max_time_stamp, batch_size, t_depth]
+        :param mutual_intensity: a tensor with size [x_depth(event count), x_depth]
+        :return: a mix hidden state at predefined time_index
+        """
+        self.__call_argument_validation(time_index, hidden_tensor, input_x, input_t, mutual_intensity)
+
+        weight = self.__calc_weight(input_x, input_t, time_index, mutual_intensity)
 
         state = []
-        with tf.name_scope('mix'):
+        with tf.name_scope('mix_' + str(time_index)):
             with tf.name_scope('mix'):
-                for i in range(0, time_stamp + 1):
+                for i in range(0, time_index + 1):
                     state.append(weight[i] * hidden_tensor[i])
-            state_list = tf.convert_to_tensor(state_list, tf.float64)
+            state = tf.convert_to_tensor(state, tf.float64)
             with tf.name_scope('average'):
-                mix_state = tf.reduce_sum(state_list, axis=0)
-                output_mix_hidden_state.append(mix_state)
-        return 1
+                mix_state = tf.reduce_sum(state, axis=0)
+        return mix_state
 
-    def __calc_weight(self, input_x, input_t, time_stamp, mutual_intensity):
+    def __calc_weight(self, input_x, input_t, time_index, mutual_intensity):
+        """
+        calculate all weights of previous event(including time_index itself), but do not consider the latter event
+        :return: a normalized hidden state weight with size [time_index+1, batch_size, 1].
+        """
         with tf.name_scope('data_unstack'):
             input_x_list = tf.unstack(input_x, axis=0)
             input_t_list = tf.unstack(input_t, axis=0)
-            input_x_list = input_x_list[0: time_stamp + 1]
-            input_t_list = input_t_list[0: time_stamp + 1]
+            input_x_list = input_x_list[0: time_index + 1]
+            input_t_list = input_t_list[0: time_index + 1]
 
         with tf.name_scope('unnormal_weight'):
             time_decay_function = self.__time_decay_function
+            last_time = input_t_list[time_index][0]
             weight_list = []
-            last_time = input_t_list[time_stamp][0]
-            for i in range(0, time_stamp + 1):
-                with tf.name_scope('weight'):
-                    intensity_sum = 0
-                    for j in range(0, i + 1):
-                        with tf.name_scope('time_calc'):
-                            time_interval = last_time - input_t[j]
-                            time_interval = tf.cast(time_interval, dtype=tf.int64)
-                            time_interval = tf.one_hot(time_interval, time_decay_function.shape[0], dtype=tf.float64)
 
-                        with tf.name_scope('decay_calc'):
-                            time_decay = time_interval * time_decay_function
-                            time_decay = tf.reduce_sum(time_decay, axis=2)
-
-                        with tf.name_scope('weight_calc'):
-                            x_t = input_x_list[j]
-                            intensity = tf.matmul(x_t, mutual_intensity)
-                            intensity = tf.matmul(intensity, self.__mutual_parameter) * time_decay
-                        intensity_sum += intensity
-                    weight_list.append(intensity_sum)
+            # calculate weight
+            for i in range(0, time_index + 1):
+                intensity_sum = 0
+                for j in range(0, i + 1):
+                    with tf.name_scope('time_calc'):
+                        time_interval = tf.cast(last_time - input_t[j], dtype=tf.int64)
+                        time_onehot = tf.one_hot(time_interval, time_decay_function.shape[0], dtype=tf.float64)
+                    with tf.name_scope('decay_calc'):
+                        time_decay = time_onehot * time_decay_function
+                        time_decay = tf.reduce_sum(time_decay, axis=2)
+                    with tf.name_scope('weight_calc'):
+                        x_t_j = input_x_list[j]
+                        intensity = tf.matmul(x_t_j, mutual_intensity)
+                        intensity = tf.matmul(intensity, self.__mutual_parameter) * time_decay
+                    intensity_sum += intensity
+                weight_list.append(intensity_sum)
             unnormalized_weight = tf.convert_to_tensor(weight_list, dtype=tf.float64)
 
         with tf.name_scope('weight'):
@@ -88,9 +94,8 @@ class HawkesBasedAttentionLayer(object):
         return weight
 
     @staticmethod
-    def __call_argument_validation(arg_map):
-        if not arg_map.__contains__('time_stamp') or (not isinstance(arg_map['time_stamp'], int)):
-            raise ValueError('must contains parameter "time_stamp", and it must be int')
+    def __call_argument_validation(time_stamp, hidden_tensor, input_x, input_t, mutual_intensity):
+        pass
 
     def __init_argument_validation(self):
         if not (self.__init_map.__contains__('mutual_intensity') and self.__init_map.__contains__('combine')):
@@ -105,8 +110,55 @@ class HawkesBasedAttentionLayer(object):
 
 
 def unit_test():
-    # AttentionMechanism()
-    pass
+    root_path = os.path.abspath('..\\..')
+
+    # model config
+    num_hidden = 3
+    x_depth = 6
+    t_depth = 1
+    max_time_stamp = 4
+    cell_type = 'revised_gru'
+    threshold = 0.5
+    zero_state = np.random.normal(0, 1, [num_hidden, ])
+    activation = tf.tanh
+    init_map = dict()
+    init_map['gate_weight'] = tf.random_normal_initializer(0, 1)
+    init_map['gate_bias'] = tf.random_normal_initializer(0, 1)
+    init_map['candidate_weight'] = tf.random_normal_initializer(0, 1)
+    init_map['candidate_bias'] = tf.random_normal_initializer(0, 1)
+    init_map['classification_weight'] = tf.random_normal_initializer(0, 1)
+    init_map['classification_bias'] = tf.random_normal_initializer(0, 1)
+    init_map['regression_weight'] = tf.random_normal_initializer(0, 1)
+    init_map['regression_bias'] = tf.random_normal_initializer(0, 1)
+    init_map['mutual_intensity'] = tf.random_normal_initializer(0, 1)
+    init_map['base_intensity'] = tf.random_normal_initializer(0, 1)
+    init_map['mutual_intensity'] = tf.random_normal_initializer(0, 1)
+    init_map['combine'] = tf.random_normal_initializer(0, 1)
+    mi_path = root_path + "\\resource\\mutual_intensity_sample.csv"
+    bi_path = root_path + "\\resource\\base_intensity_sample.csv"
+    file_encoding = 'utf-8-sig'
+    c_r_ratio = 1
+    # time decay由于日期是离散的，每一日的强度直接采用硬编码的形式写入
+    time_decay_function = np.random.normal(0, 1, [10000, ])
+
+    model_configuration = \
+        configuration.ModelConfiguration(x_depth=x_depth, t_depth=t_depth,
+                                         max_time_stamp=max_time_stamp, num_hidden=num_hidden, cell_type=cell_type,
+                                         c_r_ratio=c_r_ratio, activation=activation,
+                                         init_strategy=init_map, zero_state=zero_state, mutual_intensity_path=mi_path,
+                                         base_intensity_path=bi_path, file_encoding=file_encoding, init_map=init_map,
+                                         time_decay_function=time_decay_function, threshold=threshold)
+
+    batch_size = 5
+    placeholder_x = tf.placeholder('float64', [max_time_stamp, batch_size, x_depth])
+    placeholder_t = tf.placeholder('float64', [max_time_stamp, batch_size, t_depth])
+    hidden_tensor = tf.placeholder('float64', [max_time_stamp, batch_size, num_hidden])
+    mutual_intensity = tf.convert_to_tensor(np.random.normal(0, 1, [x_depth, x_depth]))
+
+    hawkes_attention = HawkesBasedAttentionLayer(model_configuration)
+    for time_stamp in range(0, max_time_stamp):
+        mix_state = hawkes_attention(time_stamp, hidden_tensor, placeholder_x, placeholder_t, mutual_intensity)
+        print(mix_state)
 
 
 if __name__ == "__main__":
