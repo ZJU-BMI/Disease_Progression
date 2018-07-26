@@ -1,4 +1,9 @@
 # coding=utf-8
+import datetime
+import os
+
+import numpy as np
+import tensorflow as tf
 
 
 class ModelConfiguration(object):
@@ -59,3 +64,67 @@ class TrainingConfiguration(object):
         self.test_save_path = test_save_path
         self.batch_size = batch_size
         self.iteration = iteration
+
+
+class TestConfiguration(object):
+    root_path = os.path.abspath('..\\..')
+
+    @staticmethod
+    def get_test_model_config():
+        # model config
+        num_hidden = 3
+        x_depth = 6
+        t_depth = 1
+        max_time_stamp = 4
+        cell_type = 'revised_gru'
+        zero_state = np.random.normal(0, 1, [num_hidden, ])
+        activation = tf.tanh
+        init_map = dict()
+        init_map['gate_weight'] = tf.random_normal_initializer(0, 1)
+        init_map['gate_bias'] = tf.random_normal_initializer(0, 1)
+        init_map['candidate_weight'] = tf.random_normal_initializer(0, 1)
+        init_map['candidate_bias'] = tf.random_normal_initializer(0, 1)
+        init_map['classification_weight'] = tf.random_normal_initializer(0, 1)
+        init_map['classification_bias'] = tf.random_normal_initializer(0, 1)
+        init_map['regression_weight'] = tf.random_normal_initializer(0, 1)
+        init_map['regression_bias'] = tf.random_normal_initializer(0, 1)
+        init_map['mutual_intensity'] = tf.random_normal_initializer(0, 1)
+        init_map['base_intensity'] = tf.random_normal_initializer(0, 1)
+        init_map['mutual_intensity'] = tf.random_normal_initializer(0, 1)
+        init_map['combine'] = tf.random_normal_initializer(0, 1)
+        mi_path = TestConfiguration.root_path + "\\resource\\mutual_intensity_sample.csv"
+        bi_path = TestConfiguration.root_path + "\\resource\\base_intensity_sample.csv"
+        file_encoding = 'utf-8-sig'
+        c_r_ratio = 1
+        threshold = 0.2
+        # time decay由于日期是离散的，每一日的强度直接采用硬编码的形式写入
+        time_decay_function = np.random.normal(0, 1, [10000, ])
+
+        model_config = ModelConfiguration(x_depth=x_depth, t_depth=t_depth, max_time_stamp=max_time_stamp,
+                                          num_hidden=num_hidden, cell_type=cell_type, c_r_ratio=c_r_ratio,
+                                          activation=activation, init_strategy=init_map, zero_state=zero_state,
+                                          mutual_intensity_path=mi_path, base_intensity_path=bi_path,
+                                          file_encoding=file_encoding, init_map=init_map,
+                                          time_decay_function=time_decay_function, threshold=threshold)
+        return model_config
+
+    @staticmethod
+    def get_test_training_config():
+        # training configuration
+        learning_rate = 0.1
+        optimizer = tf.train.AdamOptimizer
+        weight_decay = 0.0001
+
+        now_time = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+        train_save_path = TestConfiguration.root_path + '\\model_evaluate\\train\\' + now_time + "\\"
+        test_save_path = TestConfiguration.root_path + '\\model_evaluate\\test\\' + now_time + "\\"
+        os.makedirs(train_save_path)
+        os.makedirs(test_save_path)
+        batch_size = None
+        iteration = 20
+
+        train_config = TrainingConfiguration(learning_rate=learning_rate, optimizer=optimizer,
+                                             weight_decay=weight_decay, train_save_path=train_save_path,
+                                             test_save_path=test_save_path, batch_size=batch_size,
+                                             iteration=iteration)
+        return train_config

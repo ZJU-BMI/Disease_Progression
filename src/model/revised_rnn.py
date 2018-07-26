@@ -1,10 +1,8 @@
 # coding=utf-8
-import os
-
 import numpy as np
 import tensorflow as tf
 
-import configuration
+import configuration as config
 import revised_rnn_cell as rrc
 
 
@@ -100,55 +98,18 @@ class RevisedRNN(object):
 
 
 def unit_test():
-    root_path = os.path.abspath('..\\..')
-
-    # model config
-    num_hidden = 3
-    x_depth = 6
-    t_depth = 1
-    max_time_stamp = 4
-    cell_type = 'revised_gru'
-    threshold = 0.5
-    zero_state = np.random.normal(0, 1, [num_hidden, ])
-    activation = tf.tanh
-    init_map = dict()
-    init_map['gate_weight'] = tf.random_normal_initializer(0, 1)
-    init_map['gate_bias'] = tf.random_normal_initializer(0, 1)
-    init_map['candidate_weight'] = tf.random_normal_initializer(0, 1)
-    init_map['candidate_bias'] = tf.random_normal_initializer(0, 1)
-    init_map['classification_weight'] = tf.random_normal_initializer(0, 1)
-    init_map['classification_bias'] = tf.random_normal_initializer(0, 1)
-    init_map['regression_weight'] = tf.random_normal_initializer(0, 1)
-    init_map['regression_bias'] = tf.random_normal_initializer(0, 1)
-    init_map['mutual_intensity'] = tf.random_normal_initializer(0, 1)
-    init_map['base_intensity'] = tf.random_normal_initializer(0, 1)
-    init_map['mutual_intensity'] = tf.random_normal_initializer(0, 1)
-    init_map['combine'] = tf.random_normal_initializer(0, 1)
-    mi_path = root_path + "\\resource\\mutual_intensity_sample.csv"
-    bi_path = root_path + "\\resource\\base_intensity_sample.csv"
-    file_encoding = 'utf-8-sig'
-    c_r_ratio = 1
-    # time decay由于日期是离散的，每一日的强度直接采用硬编码的形式写入
-    time_decay_function = np.random.normal(0, 1, [10000, ])
-
-    model_configuration = \
-        configuration.ModelConfiguration(x_depth=x_depth, t_depth=t_depth,
-                                         max_time_stamp=max_time_stamp, num_hidden=num_hidden, cell_type=cell_type,
-                                         c_r_ratio=c_r_ratio, activation=activation,
-                                         init_strategy=init_map, zero_state=zero_state, mutual_intensity_path=mi_path,
-                                         base_intensity_path=bi_path, file_encoding=file_encoding, init_map=init_map,
-                                         time_decay_function=time_decay_function)
+    model_config = config.TestConfiguration.get_test_model_config()
 
     # feed data with different batch_size
-    x_1 = np.random.random_integers(0, 1, [max_time_stamp, 3, x_depth])
-    t_1 = np.random.random_integers(0, 1, [max_time_stamp, 3, t_depth])
-    x_2 = np.random.random_integers(0, 1, [max_time_stamp, 5, x_depth])
-    t_2 = np.random.random_integers(0, 1, [max_time_stamp, 5, t_depth])
+    x_1 = np.random.random_integers(0, 1, [model_config.max_time_stamp, 3, model_config.input_x_depth])
+    t_1 = np.random.random_integers(0, 1, [model_config.max_time_stamp, 3, model_config.input_t_depth])
+    x_2 = np.random.random_integers(0, 1, [model_config.max_time_stamp, 5, model_config.input_x_depth])
+    t_2 = np.random.random_integers(0, 1, [model_config.max_time_stamp, 5, model_config.input_t_depth])
 
     batch_size = None
-    revised_rnn = RevisedRNN(model_configuration=model_configuration)
-    placeholder_x = tf.placeholder('float64', [max_time_stamp, batch_size, x_depth])
-    placeholder_t = tf.placeholder('float64', [max_time_stamp, batch_size, t_depth])
+    revised_rnn = RevisedRNN(model_configuration=model_config)
+    placeholder_x = tf.placeholder('float64', [model_config.max_time_stamp, batch_size, model_config.input_x_depth])
+    placeholder_t = tf.placeholder('float64', [model_config.max_time_stamp, batch_size, model_config.input_t_depth])
     state_tensor = revised_rnn(input_x=placeholder_x, input_t=placeholder_t)
     init = tf.global_variables_initializer()
 

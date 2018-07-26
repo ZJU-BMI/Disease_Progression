@@ -1,11 +1,8 @@
 # coding=utf-8
-import os
-
-import numpy as np
 import tensorflow as tf
 
 import attention_mechanism
-import configuration
+import configuration as config
 import intensity
 import revised_rnn
 
@@ -25,9 +22,20 @@ class AttentionMixLayer(object):
         self.__mutual_intensity = mutual_intensity
         self.__attention = attention
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, **kwargs):
+        """
+        :param kwargs:
+        kwargs['input_x']: a tensor with shape: [time_stamp, batch_size, x_depth]
+        kwargs['input_t']: a tensor with shape: [time_stamp, batch_size, t_depth]
+        :return:
+        mix_hidden_state_list: a tensor with shape [time_stamp. batch_size, num_hidden]
+        each state is the mix state under the process of attention mechanism
+        """
         input_x = kwargs['input_x']
         input_t = kwargs['input_t']
+        if input_x is None or input_t is None:
+            raise ValueError('kwargs should contain key parameter input_x, input_t')
+
         mutual_intensity = self.__mutual_intensity
         hidden_tensor = self.__rnn(input_x, input_t)
 
@@ -62,20 +70,34 @@ class PredictionLayer(object):
                                      initializer=self.__init_map["regression_bias"], dtype=tf.float64)
         return c_weight, c_bias, r_weight, r_bias
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, **kwargs):
+        """
+        calculate the regression and classification loss, and return the prediction
+        :param kwargs:
+        :return:
+        c_loss, classification_loss node
+        r_loss, regression_loss node
+        c_pred_list, unnormalized classification prediction with size [time_stamp-1, batch_size, x_depth]
+        r_pred_list, regression prediction with size [time_stamp-1, batch_size, t_depth]
+        """
         mix_hidden_state_list = kwargs['mix_hidden_state_list']
-        input_data_x = kwargs['input_x']
-        input_data_t = kwargs['input_t']
+        input_x = kwargs['input_x']
+        input_t = kwargs['input_t']
+
+        if input_x is None or input_t is None or mix_hidden_state_list is None:
+            raise ValueError('kwargs should contain key parameter input_x, input_t, and mix_hidden_state_list')
+
         with tf.name_scope('output'):
+            # a list with length equal to time_stamp, each element has the size [batch_size, num_hidden]
             mix_hidden_state_list = tf.unstack(mix_hidden_state_list, axis=0)
-            c_pred_list = []
+            un_c_pred_list = []
             r_pred_list = []
             with tf.name_scope('c_output'):
                 for state in mix_hidden_state_list:
-                    c_pred = tf.matmul(state, self.__c_weight) + self.__c_bias
-                    c_pred_list.append(c_pred)
-                c_pred_list = tf.convert_to_tensor(c_pred_list)
-                self.c_pred_node = c_pred_list
+                    un_c_pred = tf.matmul(state, self.__c_weight) + self.__c_bias
+                    un_c_pred_list.append(un_c_pred)
+                un_c_pred_list = tf.convert_to_tensor(un_c_pred_list)
+                self.c_pred_node = un_c_pred_list
             with tf.name_scope('r_output'):
                 for state in mix_hidden_state_list:
                     r_pred = tf.matmul(state, self.__r_weight) + self.__r_bias
@@ -83,17 +105,26 @@ class PredictionLayer(object):
                 r_pred_list = tf.convert_to_tensor(r_pred_list)
                 self.r_pred_node = r_pred_list
 
+            # pred next event based on the previous information
+            with tf.name_scope('discard'):
+                time_stamp = un_c_pred_list.get_shape()[0].value
+
+                un_c_pred_list = un_c_pred_list[0:time_stamp - 1, :, :]
+                r_pred_list = r_pred_list[0:time_stamp - 1, :, :]
+                c_label = input_x[1:time_stamp, :, :]
+                r_label = input_t[1:time_stamp, :, :]
+
         with tf.name_scope('loss'):
             with tf.name_scope('c_loss'):
                 # we use the binary entropy loss function proposed in Large-scale Multi-label Text Classification -
                 # Revisiting Neural Networks, arxiv.org/pdf/1312.5419
-                c_loss = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=input_data_x,
-                                                                               logits=c_pred_list))
+                c_loss = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=c_label,
+                                                                               logits=un_c_pred_list))
             with tf.name_scope('r_loss'):
-                r_loss = tf.reduce_sum(tf.cast(tf.losses.mean_squared_error(labels=input_data_t,
-                                                                            predictions=r_pred_list),
+                r_loss = tf.reduce_sum(tf.cast(tf.losses.mean_squared_error(labels=r_label, predictions=r_pred_list),
                                                dtype=tf.float64))
-        return c_loss, r_loss, c_pred_list, r_pred_list
+
+        return c_loss, r_loss, un_c_pred_list, r_pred_list
 
 
 # TODO 在batch_size不定时无法使用，待解决
@@ -132,65 +163,29 @@ def performance_summary(input_x, input_t, c_pred, r_pred, threshold):
 
 
 def unit_test():
-    root_path = os.path.abspath('..\\..')
+    model_config = config.TestConfiguration.get_test_model_config()
+    train_config = config.TestConfiguration.get_test_training_config()
 
-    # model config
-    num_hidden = 3
-    x_depth = 6
-    t_depth = 1
-    max_time_stamp = 4
-    cell_type = 'revised_gru'
-    threshold = 0.5
-    zero_state = np.random.normal(0, 1, [num_hidden, ])
-    activation = tf.tanh
-    init_map = dict()
-    init_map['gate_weight'] = tf.random_normal_initializer(0, 1)
-    init_map['gate_bias'] = tf.random_normal_initializer(0, 1)
-    init_map['candidate_weight'] = tf.random_normal_initializer(0, 1)
-    init_map['candidate_bias'] = tf.random_normal_initializer(0, 1)
-    init_map['classification_weight'] = tf.random_normal_initializer(0, 1)
-    init_map['classification_bias'] = tf.random_normal_initializer(0, 1)
-    init_map['regression_weight'] = tf.random_normal_initializer(0, 1)
-    init_map['regression_bias'] = tf.random_normal_initializer(0, 1)
-    init_map['mutual_intensity'] = tf.random_normal_initializer(0, 1)
-    init_map['base_intensity'] = tf.random_normal_initializer(0, 1)
-    init_map['mutual_intensity'] = tf.random_normal_initializer(0, 1)
-    init_map['combine'] = tf.random_normal_initializer(0, 1)
-    mi_path = root_path + "\\resource\\mutual_intensity_sample.csv"
-    bi_path = root_path + "\\resource\\base_intensity_sample.csv"
-    file_encoding = 'utf-8-sig'
-    c_r_ratio = 1
-    # time decay由于日期是离散的，每一日的强度直接采用硬编码的形式写入
-    time_decay_function = np.random.normal(0, 1, [10000, ])
+    batch_size = train_config.batch_size
 
-    model_configuration = \
-        configuration.ModelConfiguration(x_depth=x_depth, t_depth=t_depth,
-                                         max_time_stamp=max_time_stamp, num_hidden=num_hidden, cell_type=cell_type,
-                                         c_r_ratio=c_r_ratio, activation=activation,
-                                         init_strategy=init_map, zero_state=zero_state, mutual_intensity_path=mi_path,
-                                         base_intensity_path=bi_path, file_encoding=file_encoding, init_map=init_map,
-                                         time_decay_function=time_decay_function, threshold=threshold)
-
-    # input define
-    batch_size = 7
-    placeholder_x = tf.placeholder('float64', [max_time_stamp, batch_size, x_depth])
-    placeholder_t = tf.placeholder('float64', [max_time_stamp, batch_size, t_depth])
+    placeholder_x = tf.placeholder('float64', [model_config.max_time_stamp, batch_size, model_config.input_x_depth])
+    placeholder_t = tf.placeholder('float64', [model_config.max_time_stamp, batch_size, model_config.input_t_depth])
 
     # component define
-    revise_gru_rnn = revised_rnn.RevisedRNN(model_configuration=model_configuration)
-    intensity_component = intensity.Intensity(model_configuration=model_configuration)
+    revise_gru_rnn = revised_rnn.RevisedRNN(model_configuration=model_config)
+    intensity_component = intensity.Intensity(model_configuration=model_config)
     mutual_intensity = intensity_component.mutual_intensity
-    attention_model = attention_mechanism.HawkesBasedAttentionLayer(model_configuration=model_configuration)
-    attention_layer = AttentionMixLayer(model_configuration=model_configuration, mutual_intensity=mutual_intensity,
+    attention_model = attention_mechanism.HawkesBasedAttentionLayer(model_configuration=model_config)
+    attention_layer = AttentionMixLayer(model_configuration=model_config, mutual_intensity=mutual_intensity,
                                         revise_rnn=revise_gru_rnn, attention=attention_model)
-    prediction_layer = PredictionLayer(model_configuration=model_configuration)
+    prediction_layer = PredictionLayer(model_configuration=model_config)
 
     # model construct
     mix_state_list = attention_layer(input_x=placeholder_x, input_t=placeholder_t)
     c_loss, r_loss, c_pred_list, r_pred_list = prediction_layer(mix_hidden_state_list=mix_state_list,
                                                                 input_x=placeholder_x, input_t=placeholder_t)
-    performance_summary(input_x=placeholder_x, input_t=placeholder_t, c_pred=c_pred_list, r_pred=r_pred_list,
-                        threshold=threshold)
+    # performance_summary(input_x=placeholder_x, input_t=placeholder_t, c_pred=c_pred_list, r_pred=r_pred_list,
+    #                     threshold=model_config.threshold)
 
 
 if __name__ == "__main__":
