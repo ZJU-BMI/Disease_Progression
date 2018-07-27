@@ -1,4 +1,6 @@
 # coding=utf-8
+import csv
+
 import tensorflow as tf
 
 import attention_mechanism
@@ -53,10 +55,10 @@ class ModelEvaluate(object):
 
         # model construct
         mix_state_list = attention_layer(input_x=placeholder_x, input_t=placeholder_t)
-        c_loss, r_loss, c_pred_list, r_pred_list = prediction_layer(mix_hidden_state_list=mix_state_list,
-                                                                    input_x=placeholder_x, input_t=placeholder_t)
-        # prediction.performance_summary(input_x=placeholder_x, input_t=placeholder_t, c_pred=c_pred_list,
-        #                                r_pred=r_pred_list, threshold=model_config.threshold)
+        c_loss, r_loss, c_pred_list, r_pred_list, c_label, r_label = \
+            prediction_layer(mix_hidden_state_list=mix_state_list, input_x=placeholder_x, input_t=placeholder_t)
+        prediction.performance_summary(input_x=c_label, input_t=r_label, c_pred=c_pred_list,
+                                       r_pred=r_pred_list, threshold=model_config.threshold)
 
         merged_summary = tf.summary.merge_all()
 
@@ -97,8 +99,8 @@ def training(train_config, model_config):
 
     # data define
     epoch = 4
-    batch_count = 3
-    actual_batch_size = 10
+    batch_count = 5
+    actual_batch_size = 5
     actual_test_size = 30
     data = read_data.LoadData(actual_batch_size, "", x_depth, t_depth, max_time_stamp)
 
@@ -106,29 +108,37 @@ def training(train_config, model_config):
     test_metric_list = list()
 
     with tf.Session() as sess:
-        tf.summary.FileWriter(train_config.train_save_path, sess.graph)
-        tf.summary.FileWriter(train_config.test_save_path, sess.graph)
+        train_summary = tf.summary.FileWriter(train_config.train_save_path, sess.graph)
+        test_summary = tf.summary.FileWriter(train_config.test_save_path, sess.graph)
         sess.run(initializer)
 
         for i in range(0, epoch):
             for j in range(0, batch_count):
                 train_x, train_t = data.get_train_next_batch()
                 sess.run([optimize_node], feed_dict={placeholder_x: train_x, placeholder_t: train_t})
-                c_pred, r_pred = sess.run([c_pred_list, r_pred_list],
-                                          feed_dict={placeholder_x: train_x, placeholder_t: train_t})
-                # TODO 在解决prediction的问题之前，暂时不用summary
-                # train_summary.add_summary(summary)
+                c_pred, r_pred, summary = sess.run([c_pred_list, r_pred_list, merged_summary],
+                                                   feed_dict={placeholder_x: train_x, placeholder_t: train_t})
+                train_summary.add_summary(summary, i * batch_count + j)
                 metric_result = pm.performance_measure(c_pred, r_pred, train_x[1:max_time_stamp],
                                                        train_t[1:max_time_stamp], max_time_stamp - 1, actual_batch_size)
                 train_metric_list.append([i, j, metric_result])
 
+                # record metadata
+                if i % 4 == 0 and j == 0:
+                    run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                    run_metadata = tf.RunMetadata()
+                    _, _, _ = sess.run([c_pred_list, r_pred_list, merged_summary],
+                                       feed_dict={placeholder_x: train_x, placeholder_t: train_t},
+                                       options=run_options, run_metadata=run_metadata)
+                    train_summary.add_run_metadata(run_metadata, 'step%d' % i)
+
             test_x, test_t = data.get_test_data()
-            c_pred, r_pred = sess.run([c_pred_list, r_pred_list],
-                                      feed_dict={placeholder_x: test_x, placeholder_t: test_t})
+            c_pred, r_pred, summary = sess.run([c_pred_list, r_pred_list, merged_summary],
+                                               feed_dict={placeholder_x: test_x, placeholder_t: test_t})
             metric_result = pm.performance_measure(c_pred, r_pred, test_x[1:max_time_stamp], test_t[1:max_time_stamp],
                                                    max_time_stamp - 1, actual_test_size)
             test_metric_list.append([i, None, metric_result])
-            # test_summary.add_summary(summary)
+            test_summary.add_summary(summary, i * batch_count)
 
         pm.save_result(train_config.train_save_path, 'train_result.csv', train_metric_list)
         pm.save_result(train_config.test_save_path, 'test_result.csv', test_metric_list)
@@ -136,7 +146,34 @@ def training(train_config, model_config):
 
 def main():
     training_configuration, model_configuration = configuration_set()
-    training(training_configuration, model_configuration)
+    train_meta = training_configuration.meta_data
+
+    for learning_rate in [0.001, 0.01]:
+        # TODO 按照这一设置开始调整超参数
+        training_configuration.learning_rate = learning_rate
+
+        model = model_configuration.meta_data
+        path = training_configuration.save_path
+        write_meta_data(train_meta, model, path)
+        graph = tf.Graph()
+        with graph.as_default():
+            print('train tensorboard command: tensorboard --logdir=' + training_configuration.save_path)
+            training(training_configuration, model_configuration)
+
+        with open(training_configuration.save_path + "finish.txt", 'w', encoding='utf-8-sig') as file:
+            file.write('finished')
+        print('optimize finish\n')
+
+
+def write_meta_data(train_meta, model_meta, path):
+    with open(path + 'metadata.csv', 'w', encoding='utf-8-sig', newline="") as file:
+        csv_writer = csv.writer(file)
+        meta_data = []
+        for key in train_meta:
+            meta_data.append([key, train_meta[key]])
+        for key in model_meta:
+            meta_data.append([key, model_meta[key]])
+        csv_writer.writerow(meta_data)
 
 
 if __name__ == '__main__':

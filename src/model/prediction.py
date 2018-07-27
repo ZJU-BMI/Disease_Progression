@@ -124,42 +124,119 @@ class PredictionLayer(object):
                 r_loss = tf.reduce_sum(tf.cast(tf.losses.mean_squared_error(labels=r_label, predictions=r_pred_list),
                                                dtype=tf.float64))
 
-        return c_loss, r_loss, un_c_pred_list, r_pred_list
+        return c_loss, r_loss, un_c_pred_list, r_pred_list, c_label, r_label
 
 
-# TODO 在batch_size不定时无法使用，待解决
 def performance_summary(input_x, input_t, c_pred, r_pred, threshold):
     # performance metrics are obtained based on A Review on Multi-Label Learning Algorithms,
-    # Zhang et al, TKDE, 2014
-    c_label = tf.cast(input_x, dtype=tf.bool)
-    r_label = input_t
+    #  Zhang et al, TKDE, 2014
 
-    c_auxiliary_one = tf.ones(c_pred.shape)
-    c_auxiliary_zero = tf.zeros(c_pred.shape)
-    c_pred_label = tf.where(c_pred > threshold, c_auxiliary_one, c_auxiliary_zero)
-    with tf.name_scope('acc'):
-        acc = tf.reduce_sum(tf.cast(tf.logical_and(c_pred_label, c_label), dtype=tf.float32)) / \
-              tf.reduce_sum(tf.cast(tf.logical_or(c_pred_label, c_label), dtype=tf.float32))
-        tf.summary.scalar('c_accuracy', acc)
-    with tf.name_scope('precision'):
-        precision = tf.reduce_sum(tf.cast(tf.logical_and(c_pred_label, c_label), dtype=tf.float32)) / \
-                    tf.reduce_sum(tf.cast(c_pred_label, dtype=tf.float32))
-        tf.summary.scalar('c_precision', precision)
-    with tf.name_scope('recall'):
-        recall = tf.reduce_sum(tf.cast(tf.logical_and(c_pred_label, c_label), dtype=tf.float32)) / \
-                 tf.reduce_sum(tf.cast(c_label, dtype=tf.float32))
-        tf.summary.scalar('c_recall', recall)
-    with tf.name_scope('f1'):
-        f_1 = precision * recall / (precision + recall)
-        tf.summary.scalar('c_f_1', f_1)
-    with tf.name_scope('hloss'):
-        denominator = (c_label.shape[0] * c_label.shape[1] * c_label.shape[2]).value
-        difference = tf.cast(tf.logical_xor(c_label, c_pred_label), dtype=tf.float32)
-        hamming_loss = tf.reduce_sum(difference) / denominator
-        tf.summary.scalar('hamming_loss', hamming_loss)
-    with tf.name_scope('time_dev'):
-        time_dev = tf.reduce_mean(tf.abs(r_pred - r_label))
-        tf.summary.scalar('abs_time_deviation', time_dev)
+    def __confusion_matrix(x, prediction, th):
+        floor = tf.floor(prediction)
+        ceil = tf.ceil(prediction)
+        pred_label = tf.cast(tf.where(prediction > th, floor, ceil), tf.bool)
+        true_label = tf.cast(x, tf.bool)
+
+        tpn = tf.reduce_sum(tf.cast(tf.logical_and(pred_label, true_label), dtype=tf.float64))
+        tnn = tf.reduce_sum(tf.cast(tf.logical_not(tf.logical_or(pred_label, true_label)), dtype=tf.float64))
+        fpn = tf.reduce_sum(tf.cast(tf.logical_xor(tf.logical_or(pred_label, true_label), true_label),
+                                    dtype=tf.float64))
+        fnn = tf.reduce_sum(tf.cast(pred_label, dtype=tf.float64)) - tnn
+        return tpn, tnn, fpn, fnn
+
+    def __auc(x, prediction, num_threshold=200):
+        step = 1.0 / num_threshold
+        threshold_list = [step * (thres + 1) for thres in range(0, num_threshold)]
+        tpr_list = []
+        fpr_list = []
+        for th in threshold_list:
+            tpn, tnn, fpn, fnn = __confusion_matrix(x, prediction, th)
+            fpr_list.append(fpn / (fpn + tpn))
+            tpr_list.append(tpn / (fpn + tpn))
+
+        auc = 0
+        previous_fpr = tf.constant(0, dtype=tf.float64)
+        previous_tpr = tf.constant(0, dtype=tf.float64)
+
+        def auc_function_1(auc_, tpr_, fpr_, p_tpr, p_fpr):
+            auc_ += p_tpr * (fpr_ - p_fpr)
+            auc_ += 0.5 * (tpr_ - p_tpr) * (fpr_ - p_fpr)
+            p_tpr = tpr_
+            p_fpr = fpr_
+            return auc_, p_tpr, p_fpr
+
+        def auc_function_2(auc_, tpr_, fpr_, p_tpr, p_fpr):
+            return tf.convert_to_tensor(auc_, dtype=tf.float64), p_tpr, p_fpr
+
+        def auc_function_3(auc_, tpr_, fpr_, p_tpr, p_fpr):
+            auc_ += tpr_ * (fpr_ - p_fpr)
+            return auc_, p_tpr, p_fpr
+
+        def auc_function_4(condition, auc_, tpr_, fpr_, p_tpr, p_fpr):
+            return tf.cond(condition, lambda: auc_function_1(auc_, tpr_, fpr_, p_tpr, p_fpr),
+                           lambda: auc_function_2(auc_, tpr_, fpr_, p_tpr, p_fpr))
+
+        def auc_function_5(condition, auc_, tpr_, fpr_, p_tpr, p_fpr):
+            return tf.cond(condition, lambda: auc_function_3(auc_, tpr_, fpr_, p_tpr, p_fpr),
+                           lambda: auc_function_2(auc_, tpr_, fpr_, p_tpr, p_fpr))
+
+        for j in range(0, len(threshold_list)):
+            tpr = tpr_list[j]
+            fpr = fpr_list[j]
+            condition_1 = tf.cond(tf.greater(tpr, previous_tpr), lambda: True, lambda: False)
+            condition_2 = tf.cond(tf.greater(fpr, previous_fpr), lambda: True, lambda: False)
+
+            auc, previous_tpr, previous_fpr = \
+                tf.cond(condition_1,
+                        lambda: auc_function_4(condition_2, auc, tpr, fpr, previous_tpr, previous_fpr),
+                        lambda: auc_function_5(condition_2, auc, tpr, fpr, previous_tpr, previous_fpr))
+
+        return auc
+
+    with tf.name_scope('performance'):
+        with tf.name_scope('confusion_matrix'):
+            tp, tn, fp, fn = __confusion_matrix(input_x, c_pred, threshold)
+            tf.summary.scalar('tp', tp)
+            tf.summary.scalar('tn', tn)
+            tf.summary.scalar('fp', fp)
+            tf.summary.scalar('fn', fn)
+        """
+        with tf.name_scope('macro_auc'):
+            label = tf.unstack(input_x, axis=2)
+            pred = tf.unstack(c_pred, axis=2)
+            auc_sum = []
+            for i in range(0, len(label)):
+                auc_sum.append(__auc(label[i], pred[i], num_threshold=200))
+            auc_sum = tf.convert_to_tensor(auc_sum)
+            tf.summary.scalar('macro_auc', tf.reduce_mean(auc_sum))
+        with tf.name_scope('micro_auc'):
+            label = tf.unstack(input_x, axis=0)
+            pred = tf.unstack(c_pred, axis=0)
+            auc_sum = []
+            for i in range(0, len(label)):
+                auc_sum.append(__auc(label[i], pred[i], num_threshold=200))
+            auc_sum = tf.convert_to_tensor(auc_sum)
+            tf.summary.scalar('micro_auc', tf.reduce_mean(auc_sum))
+        """
+
+        with tf.name_scope('acc'):
+            acc = (tp + tn) / (tp + tn + fp + fn)
+            tf.summary.scalar('c_accuracy', acc)
+        with tf.name_scope('specificity'):
+            specificity = tn / (tn + fp)
+            tf.summary.scalar('specificity', specificity)
+        with tf.name_scope('precision'):
+            precision = tp / (tp + fp)
+            tf.summary.scalar('c_precision', precision)
+        with tf.name_scope('recall'):
+            recall = tp / (tp + fn)
+            tf.summary.scalar('c_recall', recall)
+        with tf.name_scope('f1'):
+            f_1 = 2 * precision * recall / (precision + recall)
+            tf.summary.scalar('f1', f_1)
+        with tf.name_scope('time_dev'):
+            time_dev = tf.reduce_mean(tf.abs(r_pred - input_t))
+            tf.summary.scalar('abs_time_deviation', time_dev)
 
 
 def unit_test():
@@ -182,10 +259,11 @@ def unit_test():
 
     # model construct
     mix_state_list = attention_layer(input_x=placeholder_x, input_t=placeholder_t)
-    c_loss, r_loss, c_pred_list, r_pred_list = prediction_layer(mix_hidden_state_list=mix_state_list,
-                                                                input_x=placeholder_x, input_t=placeholder_t)
-    # performance_summary(input_x=placeholder_x, input_t=placeholder_t, c_pred=c_pred_list, r_pred=r_pred_list,
-    #                     threshold=model_config.threshold)
+    c_loss, r_loss, c_pred_list, r_pred_list, c_label, r_label = \
+        prediction_layer(mix_hidden_state_list=mix_state_list, input_x=placeholder_x, input_t=placeholder_t)
+
+    performance_summary(input_x=c_label, input_t=r_label, c_pred=c_pred_list,
+                        r_pred=r_pred_list, threshold=model_config.threshold)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@
       <w>dtype</w>
       <w>hawkes</w>
       <w>hloss</w>
+      <w>logdir</w>
       <w>logits</w>
       <w>lstm</w>
       <w>minibatch</w>
@@ -24,6 +25,7 @@
       <w>tanh</w>
       <w>tensorboard</w>
       <w>tensorflow</w>
+      <w>thres</w>
       <w>tkde</w>
       <w>unnormalized</w>
       <w>varscope</w>

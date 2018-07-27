@@ -18,6 +18,10 @@ class Intensity(object):
         print('initialize rnn and build mutual intensity component accomplished')
 
     def __read_mutual_intensity(self):
+        """
+        Mutual intensity is a m by m square matrix, Entry x_ij means the mutual intensity the i triggers j
+        :return:
+        """
         mutual_file_path = self.__mutual_intensity_path
         encoding = self.__file_encoding
         size = self.__event_number

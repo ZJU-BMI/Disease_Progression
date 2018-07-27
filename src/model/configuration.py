@@ -53,17 +53,61 @@ class ModelConfiguration(object):
         # parameter initializer
         self.init_map = init_map
         self.threshold = threshold
+        self.__meta_data = self.__write_meta_data()
+
+    def __write_meta_data(self):
+        meta_data = dict()
+        meta_data['time_decay_function'] = self.time_decay_function
+        meta_data['c_r_ratio'] = self.c_r_ratio
+        meta_data['input_x_depth'] = self.input_x_depth
+        meta_data['input_t_depth'] = self.input_t_depth
+        meta_data['max_time_stamp'] = self.max_time_stamp
+        meta_data['num_hidden'] = self.num_hidden
+        meta_data['cell_type'] = self.cell_type
+        meta_data['activation'] = self.activation
+        meta_data['zero_state'] = self.zero_state
+        meta_data['init_strategy'] = self.init_strategy
+        meta_data['mutual_intensity_path'] = self.mutual_intensity_path
+        meta_data['base_intensity_path'] = self.base_intensity_path
+        meta_data['file_encoding'] = self.file_encoding
+        meta_data['init_map'] = self.init_map
+        meta_data['threshold'] = self.threshold
+        return meta_data
+
+    @property
+    def meta_data(self):
+        return self.__meta_data
 
 
 class TrainingConfiguration(object):
-    def __init__(self, learning_rate, optimizer, weight_decay, train_save_path, test_save_path, batch_size, iteration):
+    def __init__(self, learning_rate, optimizer, weight_decay, test_save_path, train_save_path, save_path, batch_size,
+                 iteration):
         self.learning_rate = learning_rate
         self.optimizer = optimizer
         self.weight_decay = weight_decay
-        self.train_save_path = train_save_path
+        self.save_path = save_path
         self.test_save_path = test_save_path
+        self.train_save_path = train_save_path
         self.batch_size = batch_size
         self.iteration = iteration
+
+        self.__meta_data = self.__write_meta_data()
+
+    def __write_meta_data(self):
+        meta_data = dict()
+        meta_data['learning_rate'] = self.learning_rate
+        meta_data['optimizer'] = self.optimizer
+        meta_data['weight_decay'] = self.weight_decay
+        meta_data['save_path'] = self.save_path
+        meta_data['test_save_path'] = self.test_save_path
+        meta_data['train_save_path'] = self.train_save_path
+        meta_data['batch_size'] = self.batch_size
+        meta_data['iteration'] = self.iteration
+        return meta_data
+
+    @property
+    def meta_data(self):
+        return self.__meta_data
 
 
 class TestConfiguration(object):
@@ -72,10 +116,10 @@ class TestConfiguration(object):
     @staticmethod
     def get_test_model_config():
         # model config
-        num_hidden = 3
+        num_hidden = 10
         x_depth = 6
         t_depth = 1
-        max_time_stamp = 4
+        max_time_stamp = 10
         cell_type = 'revised_gru'
         zero_state = np.random.normal(0, 1, [num_hidden, ])
         activation = tf.tanh
@@ -96,7 +140,7 @@ class TestConfiguration(object):
         bi_path = TestConfiguration.root_path + "\\resource\\base_intensity_sample.csv"
         file_encoding = 'utf-8-sig'
         c_r_ratio = 1
-        threshold = 0.2
+        threshold = 0.1
         # time decay由于日期是离散的，每一日的强度直接采用硬编码的形式写入
         time_decay_function = np.random.normal(0, 1, [10000, ])
 
@@ -116,15 +160,16 @@ class TestConfiguration(object):
         weight_decay = 0.0001
 
         now_time = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
-        train_save_path = TestConfiguration.root_path + '\\model_evaluate\\train\\' + now_time + "\\"
-        test_save_path = TestConfiguration.root_path + '\\model_evaluate\\test\\' + now_time + "\\"
+        train_save_path = TestConfiguration.root_path + '\\model_evaluate\\' + now_time + "\\train\\"
+        test_save_path = TestConfiguration.root_path + '\\model_evaluate\\' + now_time + "\\test\\"
+        save_path = TestConfiguration.root_path + '\\model_evaluate\\' + now_time + "\\"
         os.makedirs(train_save_path)
         os.makedirs(test_save_path)
         batch_size = None
         iteration = 20
 
         train_config = TrainingConfiguration(learning_rate=learning_rate, optimizer=optimizer,
-                                             weight_decay=weight_decay, train_save_path=train_save_path,
-                                             test_save_path=test_save_path, batch_size=batch_size,
-                                             iteration=iteration)
+                                             train_save_path=train_save_path, test_save_path=test_save_path,
+                                             weight_decay=weight_decay, save_path=save_path,
+                                             batch_size=batch_size, iteration=iteration)
         return train_config
