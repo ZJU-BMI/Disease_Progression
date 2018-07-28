@@ -3,22 +3,36 @@
     <words>
       <w>arxiv</w>
       <w>backprop</w>
+      <w>callout</w>
+      <w>chartevents</w>
+      <w>cptevents</w>
       <w>dataset</w>
+      <w>datetimeevents</w>
       <w>diag</w>
+      <w>drgcodes</w>
       <w>dtype</w>
       <w>hawkes</w>
       <w>hloss</w>
+      <w>icdstays</w>
+      <w>icustays</w>
+      <w>inputevents</w>
+      <w>labevents</w>
+      <w>labitems</w>
       <w>logdir</w>
       <w>logits</w>
       <w>lstm</w>
+      <w>microbiologyevents</w>
       <w>minibatch</w>
       <w>minist</w>
       <w>mnist</w>
       <w>ndarray</w>
+      <w>noteevents</w>
       <w>onehot</w>
       <w>oper</w>
+      <w>outputevents</w>
       <w>prec</w>
       <w>pred</w>
+      <w>procedureevents</w>
       <w>relu</w>
       <w>rgru</w>
       <w>softmax</w>

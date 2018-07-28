@@ -4,7 +4,7 @@ import math
 
 import numpy as np
 
-import derive_training_data
+from plagh import derive_training_data
 
 
 class HawkesOrigin(object):

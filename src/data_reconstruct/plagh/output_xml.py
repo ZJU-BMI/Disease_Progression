@@ -1,9 +1,9 @@
-import data_cleansing
-import load_data
-from xml.etree.ElementTree import Element, SubElement
-from xml.etree import ElementTree
-from xml.dom import minidom
 import random
+from xml.dom import minidom
+from xml.etree import ElementTree
+from xml.etree.ElementTree import Element, SubElement
+
+from plagh import data_cleansing, load_data
 
 
 def data_reconstruction(data_source):
