@@ -1,3 +1,4 @@
+# coding=utf-8
 import random
 from xml.dom import minidom
 from xml.etree import ElementTree
@@ -10,7 +11,7 @@ def data_reconstruction(data_source):
     # XML生成
     root = Element('Patient_List_Event')
 
-    append_mata_data(root, data_source)
+    append_meta_data(root, data_source)
 
     patient_info_map = data_source['patient_info_map']
     patient_visit_map = data_source['patient_visit_map']
@@ -89,7 +90,7 @@ def append_operation_node(visit_operation, operation_node):
         SubElement(operation_node, "operation_item", operation_node_attr)
 
 
-def append_mata_data(root, data_source):
+def append_meta_data(root, data_source):
     patient_count, max_visit, min_visit, diagnosis_code_count_map, operation_code_count_map = meta_data_analysis(
         data_source)
     diagnosis_code_count_map['丢弃'] = 0
