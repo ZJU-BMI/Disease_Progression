@@ -6,6 +6,7 @@ from xml.dom import minidom
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element, SubElement
 
+import data_cleasing
 import load_data
 
 
@@ -83,7 +84,7 @@ def append_diagnosis_node(visit_diagnosis, diagnosis_node, diagnosis_dict):
             disease_name = 'NoName'
         diagnosis_node_attr = {'diagnosis_no': str(diagnosis_no + 1), 'icd_9_code': visit_diagnosis[diagnosis_no],
                                'disease_name': disease_name,
-                               'normalized_code': diagnosis_normalize(visit_diagnosis[diagnosis_no])}
+                               'normalized_code': data_cleasing.diagnosis_normalize(visit_diagnosis[diagnosis_no])}
         SubElement(diagnosis_node, "diagnosis_item", diagnosis_node_attr)
 
 
@@ -121,7 +122,8 @@ def append_cpt_node(visit_cpt, cpt_node, procedure_dict):
         else:
             name = 'NoRecord'
         cpt_code_attr = {'procedure_no': str(cpt_no + 1), 'icd_9_code': single_cpt_list[1],
-                         'procedure_name': name, 'normalized_code': procedure_normalize(single_cpt_list[1])}
+                         'procedure_name': name,
+                         'normalized_code': data_cleasing.procedure_normalize(single_cpt_list[1])}
         SubElement(cpt_node, "procedure_item", cpt_code_attr)
 
 
@@ -130,16 +132,6 @@ def prettify(element):
     rough_string = ElementTree.tostring(element, 'utf-8')
     recreate_xml = minidom.parseString(rough_string)
     return recreate_xml.toprettyxml(indent="  ")
-
-
-# TODO 更为细致的清洗策略留待之后做
-def diagnosis_normalize(icd_code):
-    return icd_code[0:3]
-
-
-# TODO 更为细致的清洗策略留待之后做
-def procedure_normalize(procedure_code):
-    return procedure_code[0:2]
 
 
 def main():

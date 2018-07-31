@@ -4,6 +4,8 @@ import os
 import random
 from xml.etree import ElementTree
 
+import numpy as np
+
 
 def parsing_xml(file_path):
     """
@@ -145,20 +147,20 @@ def generate_index_name_map(diagnosis_rank_map, procedure_rank_map, diagnosis_re
     procedure_list = sorted(procedure_list, key=lambda x: x[1])
 
     index_name_map = {}
-    index = 1
+    index = 0
     for item in diagnosis_list:
         diagnosis_item = "D" + str(item[0])
         if not index_name_map.__contains__(diagnosis_item):
             index_name_map[diagnosis_item] = index
             index += 1
-            if index > diagnosis_reserve:
+            if index >= diagnosis_reserve:
                 break
     for item in procedure_list:
         operation_type = "P" + str(item[0])
         if not index_name_map.__contains__(operation_type):
             index_name_map[operation_type] = index
             index += 1
-            if index > diagnosis_reserve + procedure_reserve:
+            if index >= diagnosis_reserve + procedure_reserve:
                 break
     return index_name_map
 
@@ -209,7 +211,7 @@ def generate_sequence_map(diagnosis_map, procedure_map, visit_date_map, index_na
     return event_sequence_map
 
 
-def derive_data(file_path, reserve_diagnosis, reserve_procedure):
+def derive_hawkes_data(file_path, reserve_diagnosis, reserve_procedure):
     patient_info, visit_date, diagnosis_map, procedure_map = parsing_xml(file_path)
 
     # 找到高频数据
@@ -227,7 +229,62 @@ def derive_data(file_path, reserve_diagnosis, reserve_procedure):
     return event_sequence_map, index_name_map
 
 
-def random_split(event_sequence_map, fold=5):
+def derive_neural_network_data(file_path, reserve_diagnosis, reserve_procedure, time_stamp):
+    patient_info, visit_date, diagnosis_map, procedure_map = parsing_xml(file_path)
+
+    # 找到高频数据
+    diagnosis_rank_map = diagnosis_rank(diagnosis_map)
+    procedure_rank_map = procedure_rank(procedure_map)
+
+    # 去除不需要的低频数据
+    diagnosis_map = exclude_rare_diagnosis(reserve_diagnosis, diagnosis_rank_map, diagnosis_map)
+    procedure_map = exclude_rare_procedure(reserve_procedure, procedure_rank_map, procedure_map)
+
+    # 得到编号-名称map
+    index_name_map = generate_index_name_map(diagnosis_rank_map, procedure_rank_map, reserve_diagnosis,
+                                             reserve_procedure)
+
+    # 病人的时间信息和事件信息
+    patient_x = np.zeros([len(visit_date), time_stamp, reserve_diagnosis + reserve_procedure])
+    patient_t = np.zeros([len(visit_date), time_stamp, 1])
+
+    patient_index = 0
+    for patient_id in visit_date:
+        single_patient_x = patient_x[patient_index]
+        single_patient_t = patient_t[patient_index]
+        for visit_id in visit_date[patient_id]:
+            if int(visit_id) > time_stamp:
+                continue
+            # t 信息
+            if int(visit_id) == 1:
+                single_patient_t[0][0] = 0
+            else:
+                first_day = datetime.datetime.strptime(visit_date[patient_id]['1'], "%Y-%m-%d %H:%M:%S")
+                current_day = datetime.datetime.strptime(visit_date[patient_id][visit_id], "%Y-%m-%d %H:%M:%S")
+                time_interval = (current_day - first_day).days
+                single_patient_t[int(visit_id) - 1][0] = time_interval
+
+            # x 信息
+            if diagnosis_map.__contains__(patient_id) and diagnosis_map[patient_id].__contains__(visit_id):
+                diagnosis = diagnosis_map[patient_id][visit_id]
+                for item in diagnosis:
+                    d_item = 'D' + str(item)
+                    index = index_name_map[d_item] - 1
+                    single_patient_x[int(visit_id) - 1, index] = 1
+
+            if procedure_map.__contains__(patient_id) and procedure_map[patient_id].__contains__(visit_id):
+                procedure = procedure_map[patient_id][visit_id]
+                for item in procedure:
+                    d_item = 'P' + str(item)
+                    index = index_name_map[d_item] - 1
+                    single_patient_x[int(visit_id) - 1, index] = 1
+
+        patient_index += 1
+
+    return patient_x, patient_t
+
+
+def hawkes_random_split(event_sequence_map, fold=5):
     event_list = []
     for patient_id in event_sequence_map:
         event_list.append([patient_id, event_sequence_map[patient_id]])
@@ -239,17 +296,51 @@ def random_split(event_sequence_map, fold=5):
     for i in range(0, fold):
         batch_event = event_list[i * batch_size: (i + 1) * batch_size]
         single_batch_map = dict()
+
         for item in batch_event:
             single_batch_map[item[0]] = item[1]
         batch_map[i + 1] = single_batch_map
     return batch_map
 
 
+def hawkes(reserve_diagnosis, reserve_procedure, data_path):
+    event_sequence_map, index_name_map = derive_hawkes_data(data_path + 'reconstructed.xml',
+                                                            reserve_diagnosis=reserve_diagnosis,
+                                                            reserve_procedure=reserve_procedure)
+    batch_map = hawkes_random_split(event_sequence_map, fold=5)
+    return batch_map, index_name_map
+
+
+def neural_nets(reserve_diagnosis, reserve_procedure, time_stamp, data_path):
+    # 返回Time Major的数据
+    # index 一样的x, t，对应一样的人
+    patient_x, patient_t = derive_neural_network_data(data_path + 'reconstructed.xml',
+                                                      reserve_diagnosis=reserve_diagnosis,
+                                                      reserve_procedure=reserve_procedure,
+                                                      time_stamp=time_stamp)
+
+    shuffle_list = []
+    for i in range(0, len(patient_t)):
+        shuffle_list.append(np.concatenate([patient_x[i], patient_t[i]], axis=1))
+    random.shuffle(shuffle_list)
+
+    shuffle_list = np.array(shuffle_list)
+    x = shuffle_list[:, :, 0:-1]
+    t = shuffle_list[:, :, -1]
+
+    save_path = data_path + datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+    np.save(save_path + '_x.npy', x)
+    np.save(save_path + '_t.npy', t)
+
+
 def main():
-    path = os.path.abspath('..\\..\\..') + '\\reconstruct_data\\mimic_3\\reconstruct\\reconstructed.xml'
-    event_sequence_map, index_name_map = derive_data(path, reserve_diagnosis=10, reserve_procedure=10)
-    batch_map = random_split(event_sequence_map, fold=5)
-    print(batch_map)
+    file_path = os.path.abspath('..\\..\\..') + '\\reconstruct_data\\mimic_3\\reconstruct\\'
+    reserve_diagnosis = 10
+    reserve_procedure = 10
+    time_stamp = 5
+    hawkes(reserve_diagnosis=reserve_diagnosis, reserve_procedure=reserve_procedure, data_path=file_path)
+
+    # neural_nets(reserve_diagnosis, reserve_procedure, time_stamp)
 
 
 if __name__ == '__main__':

@@ -6,7 +6,7 @@
       <sourceFolder url="file://$MODULE_DIR$/src/model" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src/data_reconstruct/mimic" isTestSource="false" />
     </content>
-    <orderEntry type="inheritedJdk" />
+    <orderEntry type="jdk" jdkName="Python 3.6" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="TestRunnerService">
