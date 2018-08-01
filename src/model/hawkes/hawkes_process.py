@@ -4,7 +4,6 @@ import math
 import os
 
 import numpy as np
-from numpy import matmul
 
 import mimic.derive_training_data as dtd
 
@@ -159,7 +158,7 @@ class Hawkes(object):
             if k == 0:
                 mutual_in = self.mutual_intensity
                 count_event = self.count_of_each_event
-                denominator = matmul(mutual_in, count_event).sum()
+                denominator = np.matmul(mutual_in, count_event).sum()
                 k_denominator[k][0] = denominator
             else:
                 cache = self.k_omega_cache[:, k]
@@ -373,69 +372,6 @@ class Hawkes(object):
 
         print("optimization accomplished")
 
-    def output_result(self, file_path):
-        train = 'train_log_likelihood.csv'
-        test = 'test_log_likelihood.csv'
-        mutual_intensity = 'mutual_intensity.csv'
-        base_intensity = 'base_intensity.csv'
-        auxiliary_variable = 'auxiliary_variable.csv'
-        k_omega = 'k_omega.csv'
-        y_omega = 'y_omega.csv'
-        event_number_each_slot = 'event_number_each_slot.csv'
-        event_count_list = 'event_count_list.csv'
-
-        with open(file_path + train, 'w', encoding='utf-8-sig', newline="") as f:
-            csv_writer = csv.writer(f)
-            for i in range(0, len(self.train_log_likelihood_tendency)):
-                csv_writer.writerows([[i, self.train_log_likelihood_tendency[i]]])
-        with open(file_path + test, 'w', encoding='utf-8-sig', newline="") as f:
-            csv_writer = csv.writer(f)
-            for i in range(0, len(self.test_log_likelihood_tendency)):
-                csv_writer.writerows([[i, self.test_log_likelihood_tendency[i]]])
-        with open(file_path + mutual_intensity, 'w', encoding='utf-8-sig', newline="") as f:
-            csv_writer = csv.writer(f)
-            mutual_intensity_matrix = []
-            for i in range(0, self.event_count):
-                row = []
-                for j in range(0, self.event_count):
-                    row.append(self.mutual_intensity[i][j])
-                mutual_intensity_matrix.append(row)
-            csv_writer.writerows(mutual_intensity_matrix)
-        with open(file_path + base_intensity, 'w', encoding='utf-8-sig', newline="") as f:
-            csv_writer = csv.writer(f)
-            base_intensity_vector = []
-            for i in range(0, self.event_count):
-                base_intensity_vector.append(self.base_intensity[i][0])
-            csv_writer.writerows([base_intensity_vector])
-        with open(file_path + auxiliary_variable, 'w', encoding='utf-8-sig', newline="") as f:
-            csv_writer = csv.writer(f)
-            for sequence_id in self.auxiliary_variable:
-                for event_no in self.auxiliary_variable[sequence_id]:
-                    sequence_trigger_list = [sequence_id, event_no]
-                    for item in self.auxiliary_variable[sequence_id][event_no]:
-                        sequence_trigger_list.append(item)
-                    csv_writer.writerows([sequence_trigger_list])
-
-        if self.excite_kernel == 'Fourier' or self.excite_kernel == 'fourier':
-            with open(file_path + k_omega, 'w', encoding='utf-8-sig', newline="") as f:
-                csv_writer = csv.writer(f)
-                k_omega_list = []
-                for slot in range(0, self.time_slot):
-                    k_omega_list.append(self.k_omega[slot])
-                csv_writer.writerows([k_omega_list])
-            with open(file_path + y_omega, 'w', encoding='utf-8-sig', newline="") as f:
-                csv_writer = csv.writer(f)
-                y_omega_list = []
-                for slot in range(0, self.time_slot):
-                    y_omega_list.append(self.y_omega[slot])
-                csv_writer.writerows([k_omega_list])
-            with open(file_path + event_number_each_slot, 'w', encoding='utf-8-sig', newline="") as f:
-                csv_writer = csv.writer(f)
-                csv_writer.writerows([self.count_of_each_slot])
-            with open(file_path + event_count_list, 'w', encoding='utf-8-sig', newline="") as f:
-                csv_writer = csv.writer(f)
-                csv_writer.writerows([k_omega_list])
-
     # calculate log-likelihood
     def log_likelihood_calculate(self, data_source):
         """
@@ -513,9 +449,10 @@ class Hawkes(object):
         return part_two
 
 
-def main():
+def unit_test():
     source_file_path = os.path.abspath('..\\..') + '\\reconstruct_data\\mimic_3\\reconstruct\\'
-    iteration = 1
+    file_name = 'reconstructed.xml'
+    iteration = 5
 
     def output_index_map(file_path, file_name, index_name_data):
         with open(file_path + file_name, 'w', encoding='utf-8-sig', newline="") as f:
@@ -523,12 +460,13 @@ def main():
             for index in index_name_data:
                 csv_writer.writerows([[index, index_name_data[index]]])
 
-    for diagnosis_no in [3, 20]:
+    for diagnosis_no in [5]:
         for procedure_no in [3]:
             # 载入数据
             data_sequence_info, index_name_map = dtd.hawkes(reserve_diagnosis=diagnosis_no,
                                                             reserve_procedure=procedure_no,
-                                                            data_path=source_file_path)
+                                                            file_path=source_file_path,
+                                                            file_name=file_name)
             index_map_name = 'index_name_map_diagnosis_' + str(diagnosis_no) + '_procedure_' + str(
                 procedure_no) + '.csv'
             output_index_map(source_file_path, index_map_name, index_name_map)
@@ -540,52 +478,18 @@ def main():
                 train_event_sequence_map.update(data_sequence_info[j])
 
             # 指数函数验证
-            exp_name_prefix = "exp_diag_" + str(diagnosis_no) + "_oper_" + str(procedure_no) + '_iter_' + str(
-                iteration) + "_"
             hawkes_process_exp = Hawkes(training_data=train_event_sequence_map, test_data=test_event_sequence_map,
                                         event_count=diagnosis_no + procedure_no, kernel='exp',
                                         init_strategy='default', time_slot=None)
             hawkes_process_exp.optimization(iteration)
-            hawkes_process_exp.output_result(source_file_path + exp_name_prefix)
 
-            for time_slot in [100, 200, 300]:
-                fm_name_prefix = "fourier_diag_" + str(diagnosis_no) + "_oper_" + str(procedure_no) + '_iter_' + str(
-                    iteration) + "_time_slot_" + str(time_slot) + "_"
+            # FM验证
+            for time_slot in [10]:
                 hawkes_process_fm = Hawkes(training_data=train_event_sequence_map, test_data=test_event_sequence_map,
                                            event_count=diagnosis_no + procedure_no, kernel='Fourier',
                                            init_strategy='default', time_slot=time_slot)
                 hawkes_process_fm.optimization(iteration)
-                hawkes_process_fm.output_result(source_file_path + fm_name_prefix)
-                """
-                # 5折交叉验证
-                for i in range(0, len(data_sequence_info)):
-                    test_event_sequence_map, test_index_name_map = data_sequence_info[i]
-                    train_event_sequence_map = {}
-                    train_index_name_map = {}
-                    for j in range(0, len(data_sequence_info)):
-                        if i == j:
-                            continue
-                        train_event_sequence_map.update(data_sequence_info[j][0])
-                        train_index_name_map.update(data_sequence_info[j][1])
-                    exp_name_prefix = "exp_diag_"+str(diagnosis_no)+"_oper_"+str(procedure_no)+'iter_'+str(
-                        iteration)+"_no_"+str(i)+"_"
-                    hawkes_process_exp = Hawkes(training_data=train_event_sequence_map, 
-                                                test_data=test_event_sequence_map,
-                                                event_count=diagnosis_no+procedure_no, hyper_parameter={'omega': 1},
-                                                kernel='exp', init_strategy='default', time_slot=200)
-                    hawkes_process_exp.optimization(iteration)
-                    hawkes_process_exp.output_result(output_file_path+exp_name_prefix)
-
-                    fm_name_prefix = "exp_diag_" + str(diagnosis_no) + "_oper_" + str(procedure_no) + '_iter_' + str(
-                        iteration) + "_no_" + str(i) + "_"
-                    hawkes_process_fm = Hawkes(training_data=train_event_sequence_map, 
-                                               test_data=test_event_sequence_map,
-                                               event_count=diagnosis_no+procedure_no, hyper_parameter=None,
-                                               kernel='Fourier',  init_strategy='default', time_slot=100)
-                    hawkes_process_fm.optimization(iteration)
-                    hawkes_process_fm.output_result(output_file_path+fm_name_prefix)
-                """
 
 
 if __name__ == "__main__":
-    main()
+    unit_test()

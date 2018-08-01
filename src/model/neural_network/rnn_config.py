@@ -1,5 +1,4 @@
 # coding=utf-8
-import datetime
 import os
 
 import numpy as np
@@ -80,17 +79,16 @@ class ModelConfiguration(object):
 
 
 class TrainingConfiguration(object):
-    def __init__(self, learning_rate, optimizer, weight_decay, test_save_path, train_save_path, save_path, batch_size,
-                 iteration):
-        self.learning_rate = learning_rate
+    def __init__(self, optimizer, weight_decay, test_save_path, train_save_path, save_path, batch_size,
+                 epoch):
+        self.learning_rate = None
         self.optimizer = optimizer
         self.weight_decay = weight_decay
         self.save_path = save_path
         self.test_save_path = test_save_path
         self.train_save_path = train_save_path
         self.batch_size = batch_size
-        self.iteration = iteration
-
+        self.epoch = epoch
         self.__meta_data = self.__write_meta_data()
 
     def __write_meta_data(self):
@@ -102,7 +100,7 @@ class TrainingConfiguration(object):
         meta_data['test_save_path'] = self.test_save_path
         meta_data['train_save_path'] = self.train_save_path
         meta_data['batch_size'] = self.batch_size
-        meta_data['iteration'] = self.iteration
+        meta_data['epoch'] = self.epoch
         return meta_data
 
     @property
@@ -155,21 +153,19 @@ class TestConfiguration(object):
     @staticmethod
     def get_test_training_config():
         # training configuration
-        learning_rate = 0.1
         optimizer = tf.train.AdamOptimizer
         weight_decay = 0.0001
 
-        now_time = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
-        train_save_path = TestConfiguration.root_path + '\\model_evaluate\\' + now_time + "\\train\\"
-        test_save_path = TestConfiguration.root_path + '\\model_evaluate\\' + now_time + "\\test\\"
-        save_path = TestConfiguration.root_path + '\\model_evaluate\\' + now_time + "\\"
+        train_save_path = TestConfiguration.root_path + '\\model_evaluate\\train\\'
+        test_save_path = TestConfiguration.root_path + '\\model_evaluate\\test\\'
+        save_path = TestConfiguration.root_path + '\\model_evaluate\\'
         os.makedirs(train_save_path)
         os.makedirs(test_save_path)
         batch_size = None
-        iteration = 20
+        epoch = 20
 
-        train_config = TrainingConfiguration(learning_rate=learning_rate, optimizer=optimizer,
+        train_config = TrainingConfiguration(optimizer=optimizer,
                                              train_save_path=train_save_path, test_save_path=test_save_path,
                                              weight_decay=weight_decay, save_path=save_path,
-                                             batch_size=batch_size, iteration=iteration)
+                                             batch_size=batch_size, epoch=epoch)
         return train_config

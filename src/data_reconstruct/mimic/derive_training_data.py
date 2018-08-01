@@ -303,8 +303,8 @@ def hawkes_random_split(event_sequence_map, fold=5):
     return batch_map
 
 
-def hawkes(reserve_diagnosis, reserve_procedure, data_path):
-    event_sequence_map, index_name_map = derive_hawkes_data(data_path + 'reconstructed.xml',
+def hawkes(reserve_diagnosis, reserve_procedure, file_path, file_name):
+    event_sequence_map, index_name_map = derive_hawkes_data(file_path + file_name,
                                                             reserve_diagnosis=reserve_diagnosis,
                                                             reserve_procedure=reserve_procedure)
     batch_map = hawkes_random_split(event_sequence_map, fold=5)

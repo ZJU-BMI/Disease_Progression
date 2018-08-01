@@ -1,10 +1,8 @@
 # coding=utf-8
+import configuration as config
 import tensorflow as tf
 
-import attention_mechanism
-import configuration as config
-import intensity
-import revised_rnn
+from neural_network import intensity, attention_mechanism, revised_rnn
 
 
 class AttentionMixLayer(object):

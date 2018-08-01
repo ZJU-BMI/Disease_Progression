@@ -1,5 +1,6 @@
 # coding=utf-8
 import csv
+import os
 
 import numpy as np
 import sklearn.metrics as sk_metric
@@ -51,6 +52,9 @@ def save_result(path, file_name, data):
     head = ['epoch', 'batch', 'acc', 'precision', 'recall', 'f1', 'hamming_loss', 'coverage', 'ranking_loss',
             'average_precision', 'macro_auc', 'micro_auc', 'absolute_time_deviation']
     matrix_to_write.append(head)
+
+    os.makedirs(path)
+
     for item in data:
         epoch = item[0]
         batch = item[1]
@@ -69,6 +73,6 @@ def save_result(path, file_name, data):
                          average_precision, macro_auc, micro_auc, absolute_time_deviation]
         matrix_to_write.append(single_result)
 
-    with open(path + file_name, 'w', encoding='utf-8-sig', newline="") as file:
+    with open(os.path.join(path, file_name), 'w', encoding='utf-8-sig', newline="") as file:
         csv_writer = csv.writer(file)
         csv_writer.writerows(matrix_to_write)

@@ -7,8 +7,10 @@
       <w>chartevents</w>
       <w>cptevents</w>
       <w>dataset</w>
+      <w>datashare</w>
       <w>datetimeevents</w>
       <w>diag</w>
+      <w>diseaseprogression</w>
       <w>drgcodes</w>
       <w>dtype</w>
       <w>hawkes</w>
@@ -36,6 +38,7 @@
       <w>relu</w>
       <w>rgru</w>
       <w>softmax</w>
+      <w>sunzhoujian</w>
       <w>tanh</w>
       <w>tensorboard</w>
       <w>tensorflow</w>

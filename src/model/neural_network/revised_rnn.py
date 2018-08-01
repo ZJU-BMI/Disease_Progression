@@ -1,9 +1,9 @@
 # coding=utf-8
+import configuration as config
 import numpy as np
 import tensorflow as tf
 
-import configuration as config
-import revised_rnn_cell as rrc
+from neural_network import revised_rnn_cell as rrc
 
 
 class RevisedRNN(object):

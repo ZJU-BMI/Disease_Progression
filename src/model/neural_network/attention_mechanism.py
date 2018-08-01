@@ -1,8 +1,7 @@
 # coding=utf-8
+import configuration as config
 import numpy as np
 import tensorflow as tf
-
-import configuration as config
 
 
 class HawkesBasedAttentionLayer(object):
