@@ -1,7 +1,7 @@
 # coding=utf-8
-import configuration as config
 import tensorflow as tf
 
+import rnn_config as config
 from neural_network import intensity, attention_mechanism, revised_rnn
 
 
@@ -103,8 +103,8 @@ class PredictionLayer(object):
                 r_pred_list = tf.convert_to_tensor(r_pred_list)
                 self.r_pred_node = r_pred_list
 
-            # pred next event based on the previous information
-            with tf.name_scope('discard'):
+            # pred next events based on the previous information, so we don't label of last input.
+            with tf.name_scope('discard_last'):
                 time_stamp = un_c_pred_list.get_shape()[0].value
 
                 un_c_pred_list = un_c_pred_list[0:time_stamp - 1, :, :]
@@ -113,11 +113,16 @@ class PredictionLayer(object):
                 r_label = input_t[1:time_stamp, :, :]
 
         with tf.name_scope('loss'):
+            # for the requirement of data structure, we need to truncate data or pad zero. The output of padding
+            # state is useless
+            with tf.name_scope('value_clip'):
+                meaningful_data = tf.reduce_max(c_label, axis=2, keepdims=True)
+                r_pred_list = r_pred_list * meaningful_data
+                un_c_pred_list = un_c_pred_list * meaningful_data
             with tf.name_scope('c_loss'):
                 # we use the binary entropy loss function proposed in Large-scale Multi-label Text Classification -
                 # Revisiting Neural Networks, arxiv.org/pdf/1312.5419
-                c_loss = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=c_label,
-                                                                               logits=un_c_pred_list))
+                c_loss = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=c_label, logits=un_c_pred_list))
             with tf.name_scope('r_loss'):
                 r_loss = tf.reduce_sum(tf.cast(tf.losses.mean_squared_error(labels=r_label, predictions=r_pred_list),
                                                dtype=tf.float64))
@@ -142,6 +147,8 @@ def performance_summary(input_x, input_t, c_pred, r_pred, threshold):
         fnn = tf.reduce_sum(tf.cast(pred_label, dtype=tf.float64)) - tnn
         return tpn, tnn, fpn, fnn
 
+    # AUC 性能过于糟糕，等以后再补充
+    """
     def __auc(x, prediction, num_threshold=200):
         step = 1.0 / num_threshold
         threshold_list = [step * (thres + 1) for thres in range(0, num_threshold)]
@@ -190,6 +197,7 @@ def performance_summary(input_x, input_t, c_pred, r_pred, threshold):
                         lambda: auc_function_5(condition_2, auc, tpr, fpr, previous_tpr, previous_fpr))
 
         return auc
+    """
 
     with tf.name_scope('performance'):
         with tf.name_scope('confusion_matrix'):
@@ -238,19 +246,20 @@ def performance_summary(input_x, input_t, c_pred, r_pred, threshold):
 
 
 def unit_test():
-    model_config = config.TestConfiguration.get_test_model_config()
-    train_config = config.TestConfiguration.get_test_training_config()
-
-    batch_size = train_config.batch_size
+    train_config, model_config = config.validate_configuration_set()
+    batch_size = model_config.batch_size
 
     placeholder_x = tf.placeholder('float64', [model_config.max_time_stamp, batch_size, model_config.input_x_depth])
     placeholder_t = tf.placeholder('float64', [model_config.max_time_stamp, batch_size, model_config.input_t_depth])
 
     # component define
     revise_gru_rnn = revised_rnn.RevisedRNN(model_configuration=model_config)
-    intensity_component = intensity.Intensity(model_configuration=model_config)
+    intensity_component = intensity.Intensity(model_config=model_config)
     mutual_intensity = intensity_component.mutual_intensity
-    attention_model = attention_mechanism.HawkesBasedAttentionLayer(model_configuration=model_config)
+    base_intensity = intensity_component.base_intensity
+    attention_model = attention_mechanism.HawkesBasedAttentionLayer(model_configuration=model_config,
+                                                                    base_intensity_placeholder=base_intensity,
+                                                                    mutual_intensity_placeholder=mutual_intensity)
     attention_layer = AttentionMixLayer(model_configuration=model_config, mutual_intensity=mutual_intensity,
                                         revise_rnn=revise_gru_rnn, attention=attention_model)
     prediction_layer = PredictionLayer(model_configuration=model_config)

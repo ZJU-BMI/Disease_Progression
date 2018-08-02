@@ -1,18 +1,19 @@
 # coding=utf-8
-import configuration as config
-import numpy as np
 import tensorflow as tf
+
+import intensity
+import rnn_config as config
 
 
 class HawkesBasedAttentionLayer(object):
-    def __init__(self, model_configuration):
+    def __init__(self, model_configuration, mutual_intensity_placeholder):
         """
         :param model_configuration contains
         x_depth:
         t_depth:
         name:
         init_map: should contain initializer with key mutual_intensity, combine
-        time_decay_function: should be a list with length at l0000, each entry indicates the intensity at
+        time_decay_function: should be a list with size [1, 10000], each entry indicates the intensity at
         corresponding(the entry's index) day
         """
         self.__x_depth = model_configuration.input_x_depth
@@ -20,8 +21,7 @@ class HawkesBasedAttentionLayer(object):
         self.__name = 'hawkes_based_attention'
         self.__init_map = model_configuration.init_map
         self.__time_decay_function = tf.convert_to_tensor(model_configuration.time_decay_function, dtype=tf.float64)
-        self.__mutual_parameter = None  # with size [x_depth, 1]
-
+        self.__mutual_intensity = mutual_intensity_placeholder
         self.__init_argument_validation()
         self.__attention_parameter()
 
@@ -78,9 +78,10 @@ class HawkesBasedAttentionLayer(object):
                         time_decay = tf.reduce_sum(time_decay, axis=2)
                     with tf.name_scope('weight_calc'):
                         x_t_j = input_x_list[j]
-                        intensity = tf.matmul(x_t_j, mutual_intensity)
-                        intensity = tf.matmul(intensity, self.__mutual_parameter) * time_decay
-                    intensity_sum += intensity
+                        single_intensity = tf.matmul(x_t_j, mutual_intensity)
+                        # TODO 此处是否要加入base intensity，怎么加，需要继续想，暂时先不加
+                        single_intensity = tf.matmul(single_intensity, self.__mutual_parameter) * time_decay
+                    intensity_sum += single_intensity
                 weight_list.append(intensity_sum)
             unnormalized_weight = tf.convert_to_tensor(weight_list, dtype=tf.float64)
 
@@ -107,19 +108,18 @@ class HawkesBasedAttentionLayer(object):
 
 
 def unit_test():
-    model_config = config.TestConfiguration.get_test_model_config()
-    train_config = config.TestConfiguration.get_test_training_config()
+    train_config, model_config = config.validate_configuration_set()
 
-    batch_size = train_config.batch_size
+    batch_size = model_config.batch_size
     placeholder_x = tf.placeholder('float64', [model_config.max_time_stamp, batch_size, model_config.input_x_depth])
     placeholder_t = tf.placeholder('float64', [model_config.max_time_stamp, batch_size, model_config.input_t_depth])
     hidden_tensor = tf.placeholder('float64', [model_config.max_time_stamp, batch_size, model_config.num_hidden])
-    mutual_intensity = tf.convert_to_tensor(np.random.normal(0, 1, [model_config.input_x_depth,
-                                                                    model_config.input_x_depth]))
 
-    hawkes_attention = HawkesBasedAttentionLayer(model_config)
+    intensity_obj = intensity.Intensity(model_config)
+    mutual_placeholder = intensity_obj.mutual_intensity
+    hawkes_attention = HawkesBasedAttentionLayer(model_config, mutual_placeholder)
     for time_stamp in range(0, model_config.max_time_stamp):
-        mix_state = hawkes_attention(time_stamp, hidden_tensor, placeholder_x, placeholder_t, mutual_intensity)
+        mix_state = hawkes_attention(time_stamp, hidden_tensor, placeholder_x, placeholder_t, mutual_placeholder)
         print(mix_state)
 
 

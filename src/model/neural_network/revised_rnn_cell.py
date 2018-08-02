@@ -20,7 +20,13 @@ class RevisedGRUCell(object):
         :param activation: activation function object, e.g., tf.tanh
         """
         self.__hidden_state = hidden_state
-        self.__activation = activation
+        if activation == 'tanh':
+            self.__activation = tf.tanh
+        elif activation == 'sigmoid':
+            self.__activation = tf.sigmoid
+        elif activation == 'relu':
+            self.__activation = tf.nn.relu
+
         self.__name = name
         self.__initial_strategy_map = initial_strategy_map
 

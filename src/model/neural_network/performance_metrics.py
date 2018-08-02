@@ -37,13 +37,13 @@ def performance_measure(c_pred, r_pred, c_label, r_label, input_depth, threshold
     coverage = sk_metric.coverage_error(c_label, c_pred_label)
     rank_loss = sk_metric.label_ranking_loss(c_label, c_pred_label)
     average_precision = sk_metric.average_precision_score(c_label, c_pred_label)
-    macro_auc = sk_metric.roc_auc_score(c_label, c_pred_label, average='macro')
-    micro_auc = sk_metric.roc_auc_score(c_label, c_pred_label, average='micro')
+    # macro_auc = sk_metric.roc_auc_score(c_label, c_pred_label, average='macro')
+    # micro_auc = sk_metric.roc_auc_score(c_label, c_pred_label, average='micro')
     time_dev = np.sum(np.abs(r_pred - r_label))
 
     metrics_map = {'acc': acc, 'precision': precision, 'recall': recall, 'f1': f_1, 'hamming_loss': hamming_loss,
                    'coverage': coverage, 'ranking_loss': rank_loss, 'average_precision': average_precision,
-                   'macro_auc': macro_auc, 'micro_auc': micro_auc, 'absolute_time_deviation': time_dev}
+                   'absolute_time_deviation': time_dev}
     return metrics_map
 
 

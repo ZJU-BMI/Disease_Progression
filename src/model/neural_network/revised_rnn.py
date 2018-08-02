@@ -1,8 +1,8 @@
 # coding=utf-8
-import configuration as config
 import numpy as np
 import tensorflow as tf
 
+import rnn_config as config
 from neural_network import revised_rnn_cell as rrc
 
 
@@ -98,7 +98,7 @@ class RevisedRNN(object):
 
 
 def unit_test():
-    model_config = config.TestConfiguration.get_test_model_config()
+    train_config, model_config = config.validate_configuration_set()
 
     # feed data with different batch_size
     x_1 = np.random.random_integers(0, 1, [model_config.max_time_stamp, 3, model_config.input_x_depth])

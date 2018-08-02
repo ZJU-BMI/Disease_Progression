@@ -2,32 +2,26 @@
 import csv
 
 import numpy as np
+import tensorflow as tf
 
 
 class Intensity(object):
-    def __init__(self, model_configuration):
-        self.__file_encoding = model_configuration.file_encoding
-        self.__event_number = model_configuration.input_x_depth
-
-        # get_intensity
-        self.__mutual_intensity_path = model_configuration.mutual_intensity_path
-        self.__base_intensity_path = model_configuration.base_intensity_path
-        self.__base_intensity = self.__read_base_intensity()
-        self.__mutual_intensity = self.__read_mutual_intensity()
-
+    def __init__(self, model_config):
+        self.__event_number = model_config.input_x_depth
+        self.__mutual_intensity_placeholder = tf.placeholder('float64', [self.__event_number, self.__event_number],
+                                                             name='mutual_intensity')
+        self.__base_intensity_placeholder = tf.placeholder('float64', [1, self.__event_number], name='base_intensity')
         print('initialize rnn and build mutual intensity component accomplished')
 
-    def __read_mutual_intensity(self):
+    @staticmethod
+    def read_mutual_intensity(mutual_intensity_path, size, encoding):
         """
         Mutual intensity is a m by m square matrix, Entry x_ij means the mutual intensity the i triggers j
         :return:
         """
-        mutual_file_path = self.__mutual_intensity_path
-        encoding = self.__file_encoding
-        size = self.__event_number
 
         mutual_intensity = np.zeros([size, size])
-        with open(mutual_file_path, 'r', encoding=encoding, newline="") as file:
+        with open(mutual_intensity_path, 'r', encoding=encoding, newline="") as file:
             csv_reader = csv.reader(file)
             row_index = 0
             for line in csv_reader:
@@ -40,13 +34,10 @@ class Intensity(object):
                 raise ValueError('mutual intensity incompatible')
         return mutual_intensity
 
-    def __read_base_intensity(self):
-        base_file_path = self.__base_intensity_path
-        encoding = self.__file_encoding
-        size = self.__event_number
-
+    @staticmethod
+    def read_base_intensity(base_intensity_path, size, encoding):
         base_intensity = np.zeros([1, size])
-        with open(base_file_path, 'r', encoding=encoding, newline="") as file:
+        with open(base_intensity_path, 'r', encoding=encoding, newline="") as file:
             csv_reader = csv.reader(file)
             for line in csv_reader:
                 if len(line) != size:
@@ -58,8 +49,8 @@ class Intensity(object):
 
     @property
     def mutual_intensity(self):
-        return self.__mutual_intensity
+        return self.__mutual_intensity_placeholder
 
     @property
     def base_intensity(self):
-        return self.__base_intensity
+        return self.__base_intensity_placeholder
