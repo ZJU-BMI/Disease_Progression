@@ -1,5 +1,6 @@
 # coding=utf-8
 import csv
+import datetime
 import math
 import os
 
@@ -14,7 +15,8 @@ class Hawkes(object):
     some code, vectorization and adding cache
     """
 
-    def __init__(self, training_data, test_data, event_count, kernel, init_strategy, time_slot, omega=1, init_time=100):
+    def __init__(self, training_data, test_data, event_count, kernel, init_strategy, time_slot, omega=1,
+                 init_time=100, max_day=10000):
         """
         Construct a new Hawkes Model
         :param training_data:
@@ -53,11 +55,14 @@ class Hawkes(object):
         self.mutual_intensity = self.initialize_mutual_intensity()
         self.auxiliary_variable = self.initialize_auxiliary_variable()
         self.initial_time = init_time
+        self.max_day = max_day
         self.auxiliary_variable_denominator = None
         self.mu_nominator_vector = None
         self.mu_denominator_vector = None
         self.alpha_denominator_matrix = None
         self.alpha_nominator_matrix = None
+        self.discrete_time_decay = None
+        self.discrete_time_integral = None
         if self.excite_kernel == 'fourier' or self.excite_kernel == 'Fourier':
             self.count_of_each_slot = self.event_count_of_each_slot_function()
             self.count_of_each_event = self.event_count_of_each_event_function()
@@ -140,7 +145,7 @@ class Hawkes(object):
                 count_list[slot_index] += 1
         return count_list
 
-    # update k_omega
+    # update y, k_omega
     def k_omega_cache_calculate(self):
         cache = np.zeros([self.event_count, self.time_slot], dtype=np.complex64)
         omega = np.arange(0, 2 * np.pi, 2 * np.pi / self.time_slot)
@@ -193,15 +198,6 @@ class Hawkes(object):
         self.mutual_intensity = self.alpha_nominator_matrix / self.alpha_denominator_matrix
         self.base_intensity = self.mu_nominator_vector / self.mu_denominator_vector
 
-    def expectation_step(self):
-        self.auxiliary_variable_denominator_update()
-        for j in self.training_data:
-            list_length = len(self.training_data[j])
-            for i in range(0, list_length):
-                for l in range(0, i):
-                    self.auxiliary_variable[j][i][l] = self.calculate_q_il(j=j, i=i, _l=l)
-                self.auxiliary_variable[j][i][i] = self.calculate_q_ii(j=j, i=i)
-
     def alpha_nominator_update(self):
         alpha_matrix = np.zeros([self.event_count, self.event_count])
         data_source = self.training_data
@@ -224,7 +220,7 @@ class Hawkes(object):
                 for k in range(0, len(event_list)):
                     k_event_index = event_list[k][0]
                     k_event_time = event_list[k][1]
-                    integral = self.kernel_integral(last_event_time - k_event_time, 0)
+                    integral = self.discrete_time_integral[last_event_time - k_event_time]
                     alpha_matrix[l][k_event_index] += integral
         self.alpha_denominator_matrix = alpha_matrix
 
@@ -246,6 +242,16 @@ class Hawkes(object):
             denominator += last_time - first_time
         self.mu_denominator_vector = denominator
 
+    # E Step
+    def expectation_step(self):
+        self.auxiliary_variable_denominator_update()
+        for j in self.training_data:
+            list_length = len(self.training_data[j])
+            for i in range(0, list_length):
+                for l in range(0, i):
+                    self.auxiliary_variable[j][i][l] = self.calculate_q_il(j=j, i=i, _l=l)
+                self.auxiliary_variable[j][i][i] = self.calculate_q_ii(j=j, i=i)
+
     def calculate_q_il(self, j, i, _l):
         """
         according to eq. 10
@@ -261,7 +267,7 @@ class Hawkes(object):
         l_event_index = event_list[_l][0]
         l_event_time = event_list[_l][1]
         alpha = self.mutual_intensity[i_event_index][l_event_index]
-        kernel = self.kernel_calculate(early_event_time=l_event_time, late_event_time=i_event_time)
+        kernel = self.discrete_time_decay[i_event_time - l_event_time]
 
         nominator = alpha * kernel
         denominator = self.auxiliary_variable_denominator[j][i]
@@ -296,7 +302,7 @@ class Hawkes(object):
                     l_event_index = event_list[l][0]
                     l_event_time = event_list[l][1]
                     alpha = self.mutual_intensity[i_event_index][l_event_index]
-                    kernel = self.kernel_calculate(early_event_time=l_event_time, late_event_time=i_event_time)
+                    kernel = self.discrete_time_decay[i_event_time - l_event_time]
                     denominator += alpha * kernel
                 single_denominator_map[i] = denominator
             denominator_map[j] = single_denominator_map
@@ -349,26 +355,52 @@ class Hawkes(object):
     def optimization(self, iteration):
 
         # initialize likelihood
+        update_time_decay_start = datetime.datetime.now()
+        self.update_discrete_time_decay_function()
+        self.update_discrete_integral_function()
+        update_time_decay_end = datetime.datetime.now()
+        likelihood_star_time = datetime.datetime.now()
         train_log_likelihood = self.log_likelihood_calculate(self.training_data)
         test_log_likelihood = self.log_likelihood_calculate(self.test_data)
+        likelihood_end_time = datetime.datetime.now()
+        likelihood_time = str((likelihood_end_time - likelihood_star_time).seconds)
+        update_time_decay = str((update_time_decay_end - update_time_decay_start).seconds)
+
         self.train_log_likelihood_tendency.append(train_log_likelihood)
         self.test_log_likelihood_tendency.append(test_log_likelihood)
-        print(self.excite_kernel + "_" + 'iteration: ' + str(0) + ',test likelihood = ' + str(test_log_likelihood) +
-              ',train likelihood = ' + str(train_log_likelihood))
+        print(self.excite_kernel + "_" + 'iteration: ' + str(0) + ',test likelihood = ' +
+              str(test_log_likelihood) + ',train likelihood = ' + str(train_log_likelihood) + " optimize time " +
+              "None" + " seconds. likelihood time " + likelihood_time + " seconds. update time: " +
+              update_time_decay + "seconds")
 
         for i in range(1, iteration + 1):
             # EM Algorithm
             if self.excite_kernel == 'fourier' or self.excite_kernel == 'Fourier':
                 self.k_omega_update()
+            update_time_decay_start = datetime.datetime.now()
+            self.update_discrete_time_decay_function()
+            self.update_discrete_integral_function()
+            update_time_decay_end = datetime.datetime.now()
+
+            optimize_start_time = datetime.datetime.now()
             self.expectation_step()
             self.maximization_step()
+            optimize_end_time = datetime.datetime.now()
 
+            likelihood_star_time = datetime.datetime.now()
             train_log_likelihood = self.log_likelihood_calculate(self.training_data)
             test_log_likelihood = self.log_likelihood_calculate(self.test_data)
+            likelihood_end_time = datetime.datetime.now()
+
+            optimize_time = str((optimize_end_time - optimize_start_time).seconds)
+            likelihood_time = str((likelihood_end_time - likelihood_star_time).seconds)
+            update_time_decay = str((update_time_decay_end - update_time_decay_start).seconds)
             self.train_log_likelihood_tendency.append(train_log_likelihood)
             self.test_log_likelihood_tendency.append(test_log_likelihood)
             print(self.excite_kernel + "_" + 'iteration: ' + str(i) + ',test likelihood = ' +
-                  str(test_log_likelihood) + ',train likelihood = ' + str(train_log_likelihood))
+                  str(test_log_likelihood) + ',train likelihood = ' + str(train_log_likelihood) + " optimize time " +
+                  optimize_time + " seconds. likelihood time " + likelihood_time + " seconds. update time: " +
+                  update_time_decay + "seconds")
 
         print("optimization accomplished")
 
@@ -417,7 +449,7 @@ class Hawkes(object):
             l_event_time = data_source[j][l][1]
 
             alpha = self.mutual_intensity[i_event_index][l_event_index]
-            kernel = self.kernel_calculate(early_event_time=l_event_time, late_event_time=i_event_time)
+            kernel = self.discrete_time_decay[i_event_time - l_event_time]
             part_one += alpha * kernel
 
         part_one = math.log(part_one)
@@ -444,18 +476,36 @@ class Hawkes(object):
             upper_bound = last_event_time - k_event_time
             alpha = self.mutual_intensity[u][k_event_index]
 
-            part_two += alpha * self.kernel_integral(lower_bound=lower_bound, upper_bound=upper_bound)
+            part_two += alpha * self.discrete_time_integral[upper_bound - lower_bound]
 
         return part_two
 
+    def update_discrete_time_decay_function(self):
+        discrete_function = []
+        for i in range(0, self.max_day):
+            intensity = self.kernel_calculate(0, i)
+            discrete_function.append(intensity)
+        discrete_function = np.array(discrete_function)
+        self.discrete_time_decay = discrete_function
+
+    def update_discrete_integral_function(self):
+        discrete_integral_function = []
+        for i in range(0, self.max_day):
+            integral = self.kernel_integral(lower_bound=0, upper_bound=i)
+            discrete_integral_function.append(integral)
+        discrete_integral_function = np.array(discrete_integral_function)
+        self.discrete_time_integral = discrete_integral_function
+
 
 def unit_test():
-    source_file_path = os.path.abspath('..\\..') + '\\reconstruct_data\\mimic_3\\reconstruct\\'
+    # server
+    # source_file_path = os.path.abspath('/mnt/datashare/group.huang/diseaseprogression/reconstruct_data/mimic_3/')
+    source_file_path = os.path.abspath('..\\..\\..') + '\\reconstruct_data\\mimic_3\\reconstruct\\'
     file_name = 'reconstructed.xml'
     iteration = 5
 
-    def output_index_map(file_path, file_name, index_name_data):
-        with open(file_path + file_name, 'w', encoding='utf-8-sig', newline="") as f:
+    def output_index_map(file_path, name, index_name_data):
+        with open(os.path.join(file_path, name), 'w', encoding='utf-8-sig', newline="") as f:
             csv_writer = csv.writer(f)
             for index in index_name_data:
                 csv_writer.writerows([[index, index_name_data[index]]])
