@@ -122,10 +122,10 @@ class PredictionLayer(object):
             with tf.name_scope('c_loss'):
                 # we use the binary entropy loss function proposed in Large-scale Multi-label Text Classification -
                 # Revisiting Neural Networks, arxiv.org/pdf/1312.5419
-                c_loss = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=c_label, logits=un_c_pred_list))
+                c_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=c_label, logits=un_c_pred_list))
             with tf.name_scope('r_loss'):
-                r_loss = tf.reduce_sum(tf.cast(tf.losses.mean_squared_error(labels=r_label, predictions=r_pred_list),
-                                               dtype=tf.float64))
+                r_loss = tf.reduce_mean(tf.cast(tf.losses.mean_squared_error(labels=r_label, predictions=r_pred_list),
+                                                dtype=tf.float64))
 
         return c_loss, r_loss, un_c_pred_list, r_pred_list, c_label, r_label
 

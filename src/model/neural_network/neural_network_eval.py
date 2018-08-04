@@ -47,7 +47,7 @@ def fine_tuning(train_config, node_list, data_object, summary_save_path, mutual_
     batch_count = data_object.get_batch_count()
 
     merged_summary = tf.summary.merge_all()
-    saver = tf.train.Saver
+    saver = tf.train.Saver()
 
     train_metric_list = list()
     test_metric_list = list()
@@ -68,9 +68,6 @@ def fine_tuning(train_config, node_list, data_object, summary_save_path, mutual_
         sess.run(initializer)
 
         for i in range(0, train_config.epoch):
-            if i == train_config.epoch/2 or i == train_config.epoch-1:
-                save_path = saver.save(sess, os.path.join(model_path, train_config.epoch+'model.ckpt'))
-                print("Model saved in path: %s" % save_path)
 
             max_index = data_object.get_batch_count() + 1
             for j in range(0, max_index):
@@ -109,6 +106,9 @@ def fine_tuning(train_config, node_list, data_object, summary_save_path, mutual_
             test_metric_list.append([i, None, metric_result])
             test_summary.add_summary(summary, i * batch_count)
 
+            if i == train_config.epoch/2 or i == train_config.epoch-1:
+                saver.save(sess=sess, save_path=os.path.join(model_path, 'model'), global_step=i)
+
     return train_metric_list, test_metric_list
 
 
@@ -132,19 +132,20 @@ def configuration_set():
     c_r_ratio = 1
     activation = 'tanh'
     init_map = dict()
-    init_map['gate_weight'] = tf.random_normal_initializer(0, 1)
-    init_map['gate_bias'] = tf.random_normal_initializer(0, 1)
-    init_map['candidate_weight'] = tf.random_normal_initializer(0, 1)
-    init_map['candidate_bias'] = tf.random_normal_initializer(0, 1)
-    init_map['classification_weight'] = tf.random_normal_initializer(0, 1)
-    init_map['classification_bias'] = tf.random_normal_initializer(0, 1)
-    init_map['regression_weight'] = tf.random_normal_initializer(0, 1)
-    init_map['regression_bias'] = tf.random_normal_initializer(0, 1)
-    init_map['mutual_intensity'] = tf.random_normal_initializer(0, 1)
-    init_map['base_intensity'] = tf.random_normal_initializer(0, 1)
-    init_map['mutual_intensity'] = tf.random_normal_initializer(0, 1)
-    init_map['combine'] = tf.random_normal_initializer(0, 1)
-    decay_step = 100
+    init_map['gate_weight'] = tf.contrib.layers.xavier_initializer()
+    init_map['candidate_weight'] = tf.contrib.layers.xavier_initializer()
+    init_map['classification_weight'] = tf.contrib.layers.xavier_initializer()
+    init_map['regression_weight'] = tf.contrib.layers.xavier_initializer()
+    init_map['candidate_bias'] = tf.initializers.zeros()
+    init_map['classification_bias'] = tf.initializers.zeros()
+    init_map['regression_bias'] = tf.initializers.zeros()
+    init_map['gate_bias'] = tf.initializers.zeros()
+
+    init_map['mutual_intensity'] = tf.contrib.layers.xavier_initializer()
+    init_map['base_intensity'] = tf.contrib.layers.xavier_initializer()
+    init_map['combine'] = tf.contrib.layers.xavier_initializer()
+
+    decay_step = 1
     model_batch_size = None
 
     # fixed train parameters
@@ -157,8 +158,7 @@ def configuration_set():
     # TODO Learning rate decay 事实上没有实现
     learning_rate_decay = 0.001
     save_path = root_path+time+"\\"
-    epoch = 100
-
+    epoch = 2
     x_path = os.path.join(root_path, '20180803194219_x.npy')
     t_path = os.path.join(root_path, '20180803194219_t.npy')
     encoding = 'utf-8-sig'
@@ -168,10 +168,10 @@ def configuration_set():
     actual_batch_size = batch_candidate[random.randint(0, 3)]
     num_hidden_candidate = [32, 64, 128, 256]
     num_hidden = num_hidden_candidate[random.randint(0, 3)]
-    zero_state = np.random.normal(0, 1, [num_hidden, ])
+    zero_state = np.zeros([num_hidden, ])
     learning_rate = 10**random.uniform(-3, 0)
-    threshold_candidate = [0.3, 0.4, 0.5]
-    threshold = threshold_candidate[random.randint(0, 2)]
+    threshold_candidate = [0.2, 0.3, 0.4, 0.5]
+    threshold = threshold_candidate[random.randint(0, 3)]
 
     model_config = config.ModelConfiguration(x_depth=x_depth, t_depth=t_depth, max_time_stamp=max_time_stamp,
                                              num_hidden=num_hidden, cell_type=cell_type, c_r_ratio=c_r_ratio,

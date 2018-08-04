@@ -134,7 +134,6 @@ class RevisedGRUCell(object):
         legal_flag = True
 
         hidden_state = self.__hidden_state
-        initial_strategy_map = self.__initial_strategy_map
         name = self.__name
 
         if hidden_state < 0 or not isinstance(hidden_state, int):
@@ -142,12 +141,6 @@ class RevisedGRUCell(object):
 
         if name is not None and not isinstance(name, str):
             legal_flag = False
-
-        key_name = ['gate_weight', 'gate_bias', 'candidate_weight', 'candidate_bias']
-        for key in initial_strategy_map:
-            if key in key_name:
-                if not (isinstance(initial_strategy_map[key], tf.keras.initializers.Initializer)):
-                    legal_flag = False
 
         if not legal_flag:
             raise Exception('the format of parameter is not right')
