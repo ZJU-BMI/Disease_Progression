@@ -11,10 +11,8 @@ class LoadData(object):
         要求输入BTD, 输出TBD
         """
         self.__batch_size = train_config.actual_batch_size
-        self.__train_x_path = train_config.train_x_path
-        self.__train_t_path = train_config.train_t_path
-        self.__test_t_path = train_config.test_t_path
-        self.__test_x_path = train_config.test_x_path
+        self.__x_path = train_config.x_path
+        self.__t_path = train_config.t_path
         self.__time_length = model_config.max_time_stamp
         self.__batch_count = None
         self.__global_batch_index = 0
@@ -34,16 +32,17 @@ class LoadData(object):
         """
         the data structure of origin_data
         :return:
-        train_x: [train_sample_size, time_length, x_depth]
-        train_t: [train_sample_size, time_length, t_depth]
-        test_x: [test_sample_size, time_length, x_depth]
-        test_t: [test_sample_size, time_length, t_depth]
+        x: [train_sample_size, time_length, x_depth]
+        t: [train_sample_size, time_length, t_depth]
         """
-        # TODO check
-        train_x = np.load(self.__train_x_path)
-        train_t = np.load(self.__train_t_path)
-        test_x = np.load(self.__test_x_path)
-        test_t = np.load(self.__test_t_path)
+        x = np.load(self.__x_path)
+        t = np.load(self.__t_path)
+
+        test_size = len(x)//5
+        train_x = x[test_size:, :, :]
+        train_t = t[test_size:, :, :]
+        test_x = x[0:test_size, :, :]
+        test_t = t[0:test_size, :, :]
 
         return train_x, train_t, test_x, test_t
 

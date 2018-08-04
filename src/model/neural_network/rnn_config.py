@@ -8,7 +8,7 @@ import tensorflow as tf
 
 class ModelConfiguration(object):
     def __init__(self, x_depth, max_time_stamp, num_hidden, cell_type, init_map, batch_size,
-                 c_r_ratio, activation, init_strategy, zero_state, time_decay_function, t_depth, threshold):
+                 c_r_ratio, activation, init_strategy, zero_state, t_depth, threshold, time_decay_size=10000):
         """
         :param x_depth: defines the dimension of the input_x in a specific time stamp, it also indicates the number
         of type of event
@@ -21,12 +21,12 @@ class ModelConfiguration(object):
         :param zero_state: the zero state of rnn, np.ndarray with shape [num_hidden,]
         :param activation: should be a function object, activation function of RNN
         :param init_strategy: parameter initialize strategy for every parameter
-        :param time_decay_function: which is long (at least 10,000 elements) 1-d np.ndarray, each entry indicates the
+        :param time_decay_size: which is a scalar, default 10000
         intensity of corresponding time stamps
         :param threshold: threshold for metrics
         """
 
-        self.time_decay_function = time_decay_function
+        self.time_decay_size = time_decay_size
 
         # Model Parameters
         self.c_r_ratio = c_r_ratio
@@ -49,7 +49,7 @@ class ModelConfiguration(object):
 
     def __write_meta_data(self):
         meta_data = dict()
-        meta_data['time_decay_function'] = self.time_decay_function
+        meta_data['time_decay_function'] = self.time_decay_size
         meta_data['c_r_ratio'] = self.c_r_ratio
         meta_data['input_x_depth'] = self.input_x_depth
         meta_data['input_t_depth'] = self.input_t_depth
@@ -71,8 +71,7 @@ class ModelConfiguration(object):
 
 class TrainingConfiguration(object):
     def __init__(self, optimizer, learning_rate, learning_rate_decay, save_path, actual_batch_size, decay_step, epoch,
-                 mutual_intensity_path, base_intensity_path, file_encoding, train_x_path, train_t_path,
-                 test_x_path, test_t_path):
+                 mutual_intensity_path, base_intensity_path, file_encoding, x_path, t_path, decay_path):
         """
         :param optimizer:
         :param learning_rate:
@@ -94,11 +93,9 @@ class TrainingConfiguration(object):
         self.mutual_intensity_path = mutual_intensity_path
         self.base_intensity_path = base_intensity_path
         self.encoding = file_encoding
-        self.train_x_path = train_x_path
-        self.train_t_path = train_t_path
-        self.test_x_path = test_x_path
-        self.test_t_path = test_t_path
-
+        self.x_path = x_path
+        self.t_path = t_path
+        self.decay_path = decay_path
         self.meta_data = self.set_meta_data()
 
     def set_meta_data(self):
@@ -113,10 +110,8 @@ class TrainingConfiguration(object):
         meta_data['actual_batch_size'] = self.actual_batch_size
         meta_data['epoch'] = self.epoch
         meta_data['encoding'] = self.encoding
-        meta_data['train_x_path'] = self.train_x_path
-        meta_data['train_t_path'] = self.train_t_path
-        meta_data['test_x_path'] = self.test_x_path
-        meta_data['test_t_path'] = self.test_t_path
+        meta_data['x_path'] = self.x_path
+        meta_data['t_path'] = self.t_path
 
         return meta_data
 
@@ -158,11 +153,10 @@ def validate_configuration_set():
     os.makedirs(save_path)
 
     epoch = 3
-    time_decay_function = np.random.uniform(0.1, 1, [1, 10000])
-    train_x_path = os.path.join(all_path, 'train_input_x.npy')
-    train_t_path = os.path.join(all_path, 'train_input_t.npy')
-    test_x_path = os.path.join(all_path, 'test_input_x.npy')
-    test_t_path = os.path.join(all_path, 'test_input_t.npy')
+    time_decay_size = 10000
+    x_path = os.path.join(all_path, '20180803194219_x.npy')
+    t_path = os.path.join(all_path, '20180803194219_t.npy')
+    decay_path = os.path.join(all_path, '20180803194219_x.npy')
     encoding = 'utf-8-sig'
 
     # random search parameter
@@ -175,14 +169,13 @@ def validate_configuration_set():
                                       num_hidden=num_hidden, cell_type=cell_type, c_r_ratio=c_r_ratio,
                                       activation=activation, init_strategy=init_map, zero_state=zero_state,
                                       init_map=init_map, batch_size=model_batch_size,
-                                      time_decay_function=time_decay_function, threshold=threshold, )
+                                      time_decay_size=time_decay_size, threshold=threshold, )
     train_config = TrainingConfiguration(optimizer=optimizer, learning_rate_decay=learning_rate_decay,
                                          save_path=save_path, actual_batch_size=actual_batch_size, epoch=epoch,
                                          decay_step=decay_step, learning_rate=learning_rate,
                                          mutual_intensity_path=mutual_intensity_path,
                                          base_intensity_path=base_intensity_path, file_encoding=encoding,
-                                         train_t_path=train_t_path, train_x_path=train_x_path, test_t_path=test_t_path,
-                                         test_x_path=test_x_path)
+                                         t_path=t_path, x_path=x_path, decay_path=decay_path)
 
     return train_config, model_config
 

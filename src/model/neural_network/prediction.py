@@ -144,7 +144,7 @@ def performance_summary(input_x, input_t, c_pred, r_pred, threshold):
         tnn = tf.reduce_sum(tf.cast(tf.logical_not(tf.logical_or(pred_label, true_label)), dtype=tf.float64))
         fpn = tf.reduce_sum(tf.cast(tf.logical_xor(tf.logical_or(pred_label, true_label), true_label),
                                     dtype=tf.float64))
-        fnn = tf.reduce_sum(tf.cast(pred_label, dtype=tf.float64)) - tnn
+        fnn = tf.reduce_sum(tf.cast(tf.logical_not(pred_label), dtype=tf.float64)) - tnn
         return tpn, tnn, fpn, fnn
 
     # AUC 性能过于糟糕，等以后再补充
@@ -202,10 +202,7 @@ def performance_summary(input_x, input_t, c_pred, r_pred, threshold):
     with tf.name_scope('performance'):
         with tf.name_scope('confusion_matrix'):
             tp, tn, fp, fn = __confusion_matrix(input_x, c_pred, threshold)
-            tf.summary.scalar('tp', tp)
-            tf.summary.scalar('tn', tn)
-            tf.summary.scalar('fp', fp)
-            tf.summary.scalar('fn', fn)
+
         """
         with tf.name_scope('macro_auc'):
             label = tf.unstack(input_x, axis=2)

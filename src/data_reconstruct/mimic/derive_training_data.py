@@ -3,7 +3,6 @@ import datetime
 import os
 import random
 from xml.etree import ElementTree
-
 import numpy as np
 
 
@@ -311,10 +310,10 @@ def hawkes(reserve_diagnosis, reserve_procedure, file_path, file_name):
     return batch_map, index_name_map
 
 
-def neural_nets(reserve_diagnosis, reserve_procedure, time_stamp, data_path):
+def neural_nets(reserve_diagnosis, reserve_procedure, time_stamp, file_path, file_name):
     # 返回Time Major的数据
     # index 一样的x, t，对应一样的人
-    patient_x, patient_t = derive_neural_network_data(data_path + 'reconstructed.xml',
+    patient_x, patient_t = derive_neural_network_data(os.path.join(file_path, file_name),
                                                       reserve_diagnosis=reserve_diagnosis,
                                                       reserve_procedure=reserve_procedure,
                                                       time_stamp=time_stamp)
@@ -327,20 +326,23 @@ def neural_nets(reserve_diagnosis, reserve_procedure, time_stamp, data_path):
     shuffle_list = np.array(shuffle_list)
     x = shuffle_list[:, :, 0:-1]
     t = shuffle_list[:, :, -1]
+    t = t[:, :, np.newaxis]
 
-    save_path = data_path + datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+    save_path = file_path + datetime.datetime.now().strftime('%Y%m%d%H%M%S')
     np.save(save_path + '_x.npy', x)
     np.save(save_path + '_t.npy', t)
 
 
 def main():
     file_path = os.path.abspath('..\\..\\..') + '\\reconstruct_data\\mimic_3\\reconstruct\\'
-    reserve_diagnosis = 10
-    reserve_procedure = 10
+    file_name = 'reconstructed.xml'
+    reserve_diagnosis = 80
+    reserve_procedure = 30
     time_stamp = 5
-    hawkes(reserve_diagnosis=reserve_diagnosis, reserve_procedure=reserve_procedure, data_path=file_path)
+    # hawkes(reserve_diagnosis=reserve_diagnosis,
+    #        reserve_procedure=reserve_procedure, file_path=file_path, file_name=file_name)
 
-    # neural_nets(reserve_diagnosis, reserve_procedure, time_stamp)
+    neural_nets(reserve_diagnosis, reserve_procedure, time_stamp, file_path, file_name)
 
 
 if __name__ == '__main__':

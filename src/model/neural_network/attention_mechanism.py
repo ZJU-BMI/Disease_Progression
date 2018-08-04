@@ -6,7 +6,7 @@ import rnn_config as config
 
 
 class HawkesBasedAttentionLayer(object):
-    def __init__(self, model_configuration, mutual_intensity_placeholder):
+    def __init__(self, model_configuration, mutual_intensity_placeholder, decay_function_place_holder):
         """
         :param model_configuration contains
         x_depth:
@@ -20,8 +20,9 @@ class HawkesBasedAttentionLayer(object):
         self.__t_depth = model_configuration.input_t_depth
         self.__name = 'hawkes_based_attention'
         self.__init_map = model_configuration.init_map
-        self.__time_decay_function = tf.convert_to_tensor(model_configuration.time_decay_function, dtype=tf.float64)
+        self.__decay_size = model_configuration.time_decay_size
         self.__mutual_intensity = mutual_intensity_placeholder
+        self.__time_decay = decay_function_place_holder
         self.__init_argument_validation()
         self.__attention_parameter()
 
@@ -55,6 +56,8 @@ class HawkesBasedAttentionLayer(object):
         calculate all weights of previous event(including time_index itself), but do not consider the latter event
         :return: a normalized hidden state weight with size [time_index+1, batch_size, 1].
         """
+        time_decay_placeholder = self.__time_decay
+
         with tf.name_scope('data_unstack'):
             input_x_list = tf.unstack(input_x, axis=0)
             input_t_list = tf.unstack(input_t, axis=0)
@@ -62,7 +65,6 @@ class HawkesBasedAttentionLayer(object):
             input_t_list = input_t_list[0: time_index + 1]
 
         with tf.name_scope('unnormal_weight'):
-            time_decay_function = self.__time_decay_function
             last_time = input_t_list[time_index][0]
             weight_list = []
 
@@ -72,9 +74,9 @@ class HawkesBasedAttentionLayer(object):
                 for j in range(0, i + 1):
                     with tf.name_scope('time_calc'):
                         time_interval = tf.cast(last_time - input_t[j], dtype=tf.int64)
-                        time_onehot = tf.one_hot(time_interval, time_decay_function.shape[0], dtype=tf.float64)
+                        time_onehot = tf.one_hot(time_interval, self.__decay_size, dtype=tf.float64)
                     with tf.name_scope('decay_calc'):
-                        time_decay = time_onehot * time_decay_function
+                        time_decay = time_onehot * time_decay_placeholder
                         time_decay = tf.reduce_sum(time_decay, axis=2)
                     with tf.name_scope('weight_calc'):
                         x_t_j = input_x_list[j]
@@ -117,7 +119,9 @@ def unit_test():
 
     intensity_obj = intensity.Intensity(model_config)
     mutual_placeholder = intensity_obj.mutual_intensity
-    hawkes_attention = HawkesBasedAttentionLayer(model_config, mutual_placeholder)
+    time_decay = tf.placeholder('float64', [model_config.time_decay_size])
+    hawkes_attention = HawkesBasedAttentionLayer(model_config, mutual_placeholder, time_decay)
+
     for time_stamp in range(0, model_config.max_time_stamp):
         mix_state = hawkes_attention(time_stamp, hidden_tensor, placeholder_x, placeholder_t, mutual_placeholder)
         print(mix_state)

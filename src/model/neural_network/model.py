@@ -16,9 +16,10 @@ class ProposedModel(object):
         self.loss = None
         self.c_pred_list = None
         self.r_pred_list = None
-        self.merged_summary = None
         self.placeholder_x = None
         self.placeholder_t = None
+        self.mi = None
+        self.placeholder_time_decay = None
 
     def __call__(self, **kwargs):
         """
@@ -29,6 +30,7 @@ class ProposedModel(object):
         placeholder_x = kwargs['placeholder_x']
         placeholder_t = kwargs['placeholder_t']
         mutual_intensity_placeholder = kwargs['mutual_intensity']
+        decay_function_place_holder = kwargs['decay_function']
 
         self.placeholder_x = placeholder_x
         self.placeholder_t = placeholder_t
@@ -39,7 +41,8 @@ class ProposedModel(object):
 
         attention_model = \
             attention_mechanism.HawkesBasedAttentionLayer(model_configuration=model_config,
-                                                          mutual_intensity_placeholder=mutual_intensity_placeholder)
+                                                          mutual_intensity_placeholder=mutual_intensity_placeholder,
+                                                          decay_function_place_holder=decay_function_place_holder)
         attention_layer = prediction.AttentionMixLayer(model_configuration=model_config,
                                                        mutual_intensity=mutual_intensity_placeholder,
                                                        revise_rnn=revise_gru_rnn, attention=attention_model)
@@ -52,17 +55,19 @@ class ProposedModel(object):
         prediction.performance_summary(input_x=c_label, input_t=r_label, c_pred=c_pred_list,
                                        r_pred=r_pred_list, threshold=model_config.threshold)
 
-        merged_summary = tf.summary.merge_all()
-
         self.c_loss = c_loss
         self.r_loss = r_loss
         self.c_pred_list = c_pred_list
         self.r_pred_list = r_pred_list
-        self.merged_summary = merged_summary
         with tf.name_scope('loss_sum'):
             self.loss = c_loss + self.loss_ratio * r_loss
-        mi = mutual_intensity_placeholder
-        return self.loss, c_pred_list, r_pred_list, merged_summary, mi
+            tf.summary.scalar('c_loss', c_loss)
+            tf.summary.scalar('r_loss', r_loss)
+            tf.summary.scalar('sum_loss', self.loss)
+
+        self.mi = mutual_intensity_placeholder
+        self.placeholder_time_decay = decay_function_place_holder
+        return self.loss, c_pred_list, r_pred_list, self.mi, decay_function_place_holder
 
 
 def unit_test():
@@ -74,9 +79,11 @@ def unit_test():
                                                model_config.input_x_depth])
     placeholder_t = tf.placeholder('float64', [model_config.max_time_stamp, model_config.batch_size,
                                                model_config.input_t_depth])
+    decay_function = tf.placeholder('float64', [model_config.time_decay_size])
     proposed_model = ProposedModel(model_config)
     _ = proposed_model(placeholder_x=placeholder_x, placeholder_t=placeholder_t,
-                       mutual_intensity=mutual_intensity, base_intensity=base_intensity)
+                       mutual_intensity=mutual_intensity, base_intensity=base_intensity,
+                       decay_function=decay_function)
 
 
 if __name__ == "__main__":
