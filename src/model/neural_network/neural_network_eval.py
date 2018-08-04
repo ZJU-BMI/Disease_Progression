@@ -231,6 +231,7 @@ def main():
             key_node_list = build_model(model_config)
             fine_tuning(train_config, key_node_list, data_object, train_config.save_path, mutual_intensity_data,
                         time_decay_data)
+            write_meta_data(train_config.meta_data, model_config.meta_data, train_config.save_path)
 
 
 if __name__ == '__main__':
