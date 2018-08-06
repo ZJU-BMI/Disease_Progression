@@ -38,7 +38,7 @@ def save_result(return_data_map, file_path, name_prefix):
     test = name_prefix + 'test_log_likelihood.csv'
     mutual_intensity = name_prefix + 'mutual_intensity.csv'
     base_intensity = name_prefix + 'base_intensity.csv'
-    auxiliary_variable = name_prefix + 'auxiliary_variable.csv'
+    # auxiliary_variable = name_prefix + 'auxiliary_variable.csv'
     k_omega = name_prefix + 'k_omega.csv'
     y_omega = name_prefix + 'y_omega.csv'
     event_number_each_slot = name_prefix + 'event_number_each_slot.csv'
@@ -77,15 +77,15 @@ def save_result(return_data_map, file_path, name_prefix):
             base_intensity_vector.append(base_intensity_data[i][0])
         csv_writer.writerows([base_intensity_vector])
 
-    with open(os.path.join(file_path, auxiliary_variable), 'w', encoding='utf-8-sig', newline="") as f:
-        csv_writer = csv.writer(f)
-        auxiliary_variable_data = return_data_map['auxiliary_variable']
-        for sequence_id in auxiliary_variable_data:
-            for event_no in auxiliary_variable_data[sequence_id]:
-                sequence_trigger_list = [sequence_id, event_no]
-                for item in auxiliary_variable_data[sequence_id][event_no]:
-                    sequence_trigger_list.append(item)
-                csv_writer.writerows([sequence_trigger_list])
+    # with open(os.path.join(file_path, auxiliary_variable), 'w', encoding='utf-8-sig', newline="") as f:
+    #     csv_writer = csv.writer(f)
+    #     auxiliary_variable_data = return_data_map['auxiliary_variable']
+    #     for sequence_id in auxiliary_variable_data:
+    #         for event_no in auxiliary_variable_data[sequence_id]:
+    #             sequence_trigger_list = [sequence_id, event_no]
+    #             for item in auxiliary_variable_data[sequence_id][event_no]:
+    #                 sequence_trigger_list.append(item)
+    #             csv_writer.writerows([sequence_trigger_list])
 
     if return_data_map['kernel'] == 'Fourier' or return_data_map['kernel'] == 'fourier':
         with open(os.path.join(file_path, k_omega), 'w', encoding='utf-8-sig', newline="") as f:
@@ -176,8 +176,8 @@ def hawkes_eval():
     name_prefix_temp = '{}_diagnosis_{}_procedure_{}_iteration_{}_slot_{}_'
 
     # Experiment
-    iteration = 5
-    for diagnosis_reserve in [80, 70, 60, 50, 40, 30, 20, 10]:
+    iteration = 10
+    for diagnosis_reserve in [70, 50, 30, 10]:
         for procedure_reserve in [30, 20, 10]:
             train_data, test_data, name_index_map = \
                 hawkes_load_data(source_file_path, source_file_name, diagnosis_reserve, procedure_reserve)
@@ -196,7 +196,7 @@ def hawkes_eval():
                                                           str(iteration), 'none')
                     save_result(parameter_map, save_file_path, name_prefix)
                 else:
-                    for time_slot in [100, 3, 4]:
+                    for time_slot in [1000]:
                         parameter_map = hawkes_optimization(train_data, test_data, iteration, diagnosis_reserve,
                                                             procedure_reserve, kernel, time_slot)
                         name_prefix = name_prefix_temp.format(kernel, str(diagnosis_reserve), str(procedure_reserve),

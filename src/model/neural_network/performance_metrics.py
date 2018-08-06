@@ -76,3 +76,13 @@ def save_result(path, file_name, data):
     with open(os.path.join(path, file_name), 'w', encoding='utf-8-sig', newline="") as file:
         csv_writer = csv.writer(file)
         csv_writer.writerows(matrix_to_write)
+
+
+def auc(prediction, label, num_threshold, **kwargs):
+    """
+    :param prediction:
+    :param label:
+    :param num_threshold:
+    :param kwargs:
+    :return:
+    """

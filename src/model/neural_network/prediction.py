@@ -6,7 +6,7 @@ from neural_network import intensity, attention_mechanism, revised_rnn
 
 
 class AttentionMixLayer(object):
-    def __init__(self, model_configuration, revise_rnn, mutual_intensity, attention):
+    def __init__(self, model_configuration, revise_rnn, attention):
         # General Model Parameters
         self.__c_r_ratio = model_configuration.c_r_ratio
         self.__input_x_depth = model_configuration.input_x_depth
@@ -17,7 +17,6 @@ class AttentionMixLayer(object):
 
         # component
         self.__rnn = revise_rnn
-        self.__mutual_intensity = mutual_intensity
         self.__attention = attention
 
     def __call__(self, **kwargs):
@@ -34,14 +33,13 @@ class AttentionMixLayer(object):
         if input_x is None or input_t is None:
             raise ValueError('kwargs should contain key parameter input_x, input_t')
 
-        mutual_intensity = self.__mutual_intensity
         hidden_tensor = self.__rnn(input_x, input_t)
 
         mix_hidden_state_list = []
         with tf.name_scope('attention'):
             for time_stamp in range(0, self.__max_time_stamp):
                 with tf.name_scope('mix_state'):
-                    mix_state = self.__attention(time_stamp, hidden_tensor, input_x, input_t, mutual_intensity)
+                    mix_state = self.__attention(time_stamp, hidden_tensor, input_x, input_t)
                     mix_hidden_state_list.append(mix_state)
             mix_hidden_state_list = tf.convert_to_tensor(mix_hidden_state_list, dtype=tf.float64,
                                                          name='attention_states')
@@ -103,14 +101,13 @@ class PredictionLayer(object):
                 r_pred_list = tf.convert_to_tensor(r_pred_list)
                 self.r_pred_node = r_pred_list
 
-            # pred next events based on the previous information, so we don't label of last input.
-            with tf.name_scope('discard_last'):
-                time_stamp = un_c_pred_list.get_shape()[0].value
-
-                un_c_pred_list = un_c_pred_list[0:time_stamp - 1, :, :]
-                r_pred_list = r_pred_list[0:time_stamp - 1, :, :]
-                c_label = input_x[1:time_stamp, :, :]
-                r_label = input_t[1:time_stamp, :, :]
+        # pred next events based on the previous information, so we don't predict the last input.
+        with tf.name_scope('discard_last'):
+            time_stamp = un_c_pred_list.get_shape()[0].value
+            un_c_pred_list = un_c_pred_list[0:time_stamp - 1, :, :]
+            r_pred_list = r_pred_list[0:time_stamp - 1, :, :]
+            c_label = input_x[1:time_stamp, :, :]
+            r_label = input_t[1:time_stamp, :, :]
 
         with tf.name_scope('loss'):
             # for the requirement of data structure, we need to truncate data or pad zero. The output of padding
@@ -124,8 +121,8 @@ class PredictionLayer(object):
                 # Revisiting Neural Networks, arxiv.org/pdf/1312.5419
                 c_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=c_label, logits=un_c_pred_list))
             with tf.name_scope('r_loss'):
-                r_loss = tf.reduce_mean(tf.cast(tf.losses.mean_squared_error(labels=r_label, predictions=r_pred_list),
-                                                dtype=tf.float64))
+                r_loss = tf.reduce_mean(tf.losses.mean_squared_error(labels=r_label, predictions=r_pred_list),
+                                        dtype=tf.float64)
 
         return c_loss, r_loss, un_c_pred_list, r_pred_list, c_label, r_label
 
@@ -252,13 +249,13 @@ def unit_test():
     # component define
     revise_gru_rnn = revised_rnn.RevisedRNN(model_configuration=model_config)
     intensity_component = intensity.Intensity(model_config=model_config)
-    mutual_intensity = intensity_component.mutual_intensity
-    base_intensity = intensity_component.base_intensity
+    mutual_intensity = intensity_component.mutual_intensity_placeholder
+    decay_function = tf.placeholder('float64', [model_config.time_decay_size])
     attention_model = attention_mechanism.HawkesBasedAttentionLayer(model_configuration=model_config,
-                                                                    base_intensity_placeholder=base_intensity,
+                                                                    decay_function_place_holder=decay_function,
                                                                     mutual_intensity_placeholder=mutual_intensity)
-    attention_layer = AttentionMixLayer(model_configuration=model_config, mutual_intensity=mutual_intensity,
-                                        revise_rnn=revise_gru_rnn, attention=attention_model)
+    attention_layer = AttentionMixLayer(model_configuration=model_config, revise_rnn=revise_gru_rnn,
+                                        attention=attention_model)
     prediction_layer = PredictionLayer(model_configuration=model_config)
 
     # model construct

@@ -1,12 +1,14 @@
 # coding=utf-8
 import csv
-import os
 import datetime
+import os
+import random
+
 import numpy as np
 import tensorflow as tf
+
 import read_data
 import rnn_config as config
-import random
 from intensity import Intensity
 from model import ProposedModel
 from neural_network import performance_metrics as pm
@@ -24,7 +26,7 @@ def build_model(model_config):
         placeholder_t = tf.placeholder('float64', [max_time_stamp, batch_size, t_depth])
         decay_function = tf.placeholder('float64', [model_config.time_decay_size])
         intensity = Intensity(model_config)
-        mutual_intensity = intensity.mutual_intensity
+        mutual_intensity = intensity.mutual_intensity_placeholder
     model = ProposedModel(model_config=model_config)
 
     loss, c_pred_list, r_pred_list, mi, time_decay = \
@@ -40,8 +42,10 @@ def fine_tuning(train_config, node_list, data_object, summary_save_path, mutual_
     if train_config.optimizer == 'Adam':
         with tf.variable_scope('adam_para', reuse=True):
             optimizer = tf.train.AdamOptimizer
-    else:
+    elif train_config.optimizer == 'default':
         optimizer = tf.train.GradientDescentOptimizer
+    else:
+        raise ValueError('')
     optimize_node = optimizer(train_config.learning_rate).minimize(loss)
     initializer = tf.global_variables_initializer()
     batch_count = data_object.get_batch_count()
@@ -80,6 +84,7 @@ def fine_tuning(train_config, node_list, data_object, summary_save_path, mutual_
                               time_decay: time_decay_data}
                 _, c_pred, r_pred, summary = sess.run([optimize_node, c_pred_list, r_pred_list, merged_summary],
                                                       feed_dict=train_dict)
+                # Summary node 写错了
                 train_summary.add_summary(summary, i * batch_count + j)
                 metric_result = pm.performance_measure(c_pred, r_pred, train_x[1:max_time_stamp],
                                                        train_t[1:max_time_stamp], max_time_stamp - 1, actual_batch_size)
@@ -91,7 +96,8 @@ def fine_tuning(train_config, node_list, data_object, summary_save_path, mutual_
                     run_metadata = tf.RunMetadata()
                     _, _, _ = sess.run([c_pred_list, r_pred_list, merged_summary],
                                        feed_dict=train_dict,
-                                       options=run_options, run_metadata=run_metadata)
+                                       options=run_options,
+                                       run_metadata=run_metadata)
                     train_summary.add_run_metadata(run_metadata, 'step%d' % i)
 
             test_x, test_t = data_object.get_test_data()
@@ -175,8 +181,8 @@ def configuration_set():
 
     model_config = config.ModelConfiguration(x_depth=x_depth, t_depth=t_depth, max_time_stamp=max_time_stamp,
                                              num_hidden=num_hidden, cell_type=cell_type, c_r_ratio=c_r_ratio,
-                                             activation=activation, init_strategy=init_map, zero_state=zero_state,
-                                             init_map=init_map, batch_size=model_batch_size, threshold=threshold)
+                                             activation=activation, zero_state=zero_state, init_map=init_map,
+                                             batch_size=model_batch_size, threshold=threshold)
     train_config = config.TrainingConfiguration(optimizer=optimizer, learning_rate_decay=learning_rate_decay,
                                                 save_path=save_path, actual_batch_size=actual_batch_size, epoch=epoch,
                                                 decay_step=decay_step, learning_rate=learning_rate,

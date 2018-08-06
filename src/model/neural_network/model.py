@@ -73,8 +73,8 @@ class ProposedModel(object):
 def unit_test():
     _, model_config = config.validate_configuration_set()
     intensity_obj = intensity.Intensity(model_config)
-    base_intensity = intensity_obj.base_intensity
-    mutual_intensity = intensity_obj.mutual_intensity
+    base_intensity = intensity_obj.base_intensity_placeholder
+    mutual_intensity = intensity_obj.mutual_intensity_placeholder
     placeholder_x = tf.placeholder('float64', [model_config.max_time_stamp, model_config.batch_size,
                                                model_config.input_x_depth])
     placeholder_t = tf.placeholder('float64', [model_config.max_time_stamp, model_config.batch_size,

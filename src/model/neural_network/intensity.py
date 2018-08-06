@@ -8,10 +8,18 @@ import tensorflow as tf
 class Intensity(object):
     def __init__(self, model_config):
         self.__event_number = model_config.input_x_depth
-        self.__mutual_intensity_placeholder = tf.placeholder('float64', [self.__event_number, self.__event_number],
-                                                             name='mutual_intensity')
-        self.__base_intensity_placeholder = tf.placeholder('float64', [1, self.__event_number], name='base_intensity')
+        self.__mi_holder = tf.placeholder('float64',
+                                          [self.__event_number, self.__event_number], name='mutual_intensity')
+        self.__bi_holder = tf.placeholder('float64', [1, self.__event_number], name='base_intensity')
         print('initialize rnn and build mutual intensity component accomplished')
+
+    @property
+    def mutual_intensity_placeholder(self):
+        return self.__mi_holder
+
+    @property
+    def base_intensity_placeholder(self):
+        return self.__bi_holder
 
     @staticmethod
     def read_mutual_intensity(mutual_intensity_path, size, encoding):
@@ -46,11 +54,3 @@ class Intensity(object):
                     base_intensity[0][col_index] = line[col_index]
                 break
         return base_intensity
-
-    @property
-    def mutual_intensity(self):
-        return self.__mutual_intensity_placeholder
-
-    @property
-    def base_intensity(self):
-        return self.__base_intensity_placeholder

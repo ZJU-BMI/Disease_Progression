@@ -16,7 +16,7 @@ class RevisedRNN(object):
         hidden_state: scalar
         init_map: parameter strategy map, at least contain 4 elements with key 'gate_weight',
         'gate_bias', 'candidate_weight', 'candidate_bias'. each key corresponds to a tf.Variable initializer
-        activation: a function object
+        activation: string,
         zero_state: the zero state of rnn with size [hidden_state]
         cell_type: default revised_gru
         """
@@ -108,9 +108,11 @@ def unit_test():
 
     batch_size = None
     revised_rnn = RevisedRNN(model_configuration=model_config)
+
     placeholder_x = tf.placeholder('float64', [model_config.max_time_stamp, batch_size, model_config.input_x_depth])
     placeholder_t = tf.placeholder('float64', [model_config.max_time_stamp, batch_size, model_config.input_t_depth])
     state_tensor = revised_rnn(input_x=placeholder_x, input_t=placeholder_t)
+
     init = tf.global_variables_initializer()
 
     with tf.Session() as sess:

@@ -37,7 +37,6 @@ class HawkesBasedAttentionLayer(object):
         :param mutual_intensity: a tensor with size [x_depth(event count), x_depth]
         :return: a mix hidden state at predefined time_index
         """
-        self.__call_argument_validation(time_index, hidden_tensor, input_x, input_t, mutual_intensity)
 
         weight = self.__calc_weight(input_x, input_t, time_index, mutual_intensity)
 
@@ -53,7 +52,10 @@ class HawkesBasedAttentionLayer(object):
 
     def __calc_weight(self, input_x, input_t, time_index, mutual_intensity):
         """
-        calculate all weights of previous event(including time_index itself), but do not consider the latter event
+        :param input_x:
+        :param input_t:
+        :param time_index: the first output has the time index equal to zero
+        :param mutual_intensity:
         :return: a normalized hidden state weight with size [time_index+1, batch_size, 1].
         """
         time_decay_placeholder = self.__time_decay
@@ -88,14 +90,10 @@ class HawkesBasedAttentionLayer(object):
             unnormalized_weight = tf.convert_to_tensor(weight_list, dtype=tf.float64)
 
         with tf.name_scope('weight'):
-            intensity_sum = tf.expand_dims(tf.reduce_sum(unnormalized_weight, axis=1), axis=2)
+            intensity_sum = tf.reduce_sum(unnormalized_weight, axis=0, keep_dims=True)
             weight = unnormalized_weight / intensity_sum
 
         return weight
-
-    @staticmethod
-    def __call_argument_validation(time_stamp, hidden_tensor, input_x, input_t, mutual_intensity):
-        pass
 
     def __init_argument_validation(self):
         if not (self.__init_map.__contains__('mutual_intensity') and self.__init_map.__contains__('combine')):
@@ -118,7 +116,7 @@ def unit_test():
     hidden_tensor = tf.placeholder('float64', [model_config.max_time_stamp, batch_size, model_config.num_hidden])
 
     intensity_obj = intensity.Intensity(model_config)
-    mutual_placeholder = intensity_obj.mutual_intensity
+    mutual_placeholder = intensity_obj.mutual_intensity_placeholder
     time_decay = tf.placeholder('float64', [model_config.time_decay_size])
     hawkes_attention = HawkesBasedAttentionLayer(model_config, mutual_placeholder, time_decay)
 

@@ -102,10 +102,14 @@ def read_procedures_icd(root, file_name):
     return cpt_map
 
 
-def main():
+def unit_test():
     root = os.path.abspath('..\\..\\..') + '\\reconstruct_data\\mimic_3\\source_data\\'
-    cpt_events = read_procedures_icd(root, 'cptevents')
+    read_procedures_icd(root, 'cptevents')
+    read_admissions(root, 'admissions')
+    read_diagnosis(root, 'DIAGNOSES_ICD')
+    read_patients(root, 'PATIENTS')
+    print('test finish')
 
 
 if __name__ == "__main__":
-    main()
+    unit_test()

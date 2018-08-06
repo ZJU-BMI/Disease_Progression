@@ -7,22 +7,25 @@ import rnn_config as config
 class LoadData(object):
     def __init__(self, train_config, model_config):
         """
-         encapsulation the load data process
-        要求输入BTD, 输出TBD
+        encapsulation the load data process
+        要求输入BTD, 输出TBD的数据
         """
         self.__batch_size = train_config.actual_batch_size
         self.__x_path = train_config.x_path
         self.__t_path = train_config.t_path
         self.__time_length = model_config.max_time_stamp
-        self.__batch_count = None
         self.__global_batch_index = 0
         self.__x_depth = model_config.input_x_depth
         self.__t_depth = model_config.input_t_depth
+        self.__batch_count = None
 
-        self.__origin_train_x, self.__origin_train_t, self.__origin_test_x, self.__origin_test_t = self.__read_data()
-        self.__origin_test_x = np.transpose(self.__origin_test_x, [1, 0, 2])
-        self.__origin_test_t = np.transpose(self.__origin_test_t, [1, 0, 2])
+        train_x, train_t, test_x, test_t = self.__read_data()
 
+        # test data BTD->TBD
+        self.__test_x = np.transpose(test_x, [1, 0, 2])
+        self.__test_t = np.transpose(test_t, [1, 0, 2])
+        self.__origin_train_x = train_x
+        self.__origin_train_t = train_t
         self.__batch_train_x, self.__batch_train_t = self.__pre_process(self.__origin_train_x, self.__origin_train_t)
 
     def get_batch_count(self):
@@ -61,7 +64,7 @@ class LoadData(object):
         return x, t
 
     def get_test_data(self):
-        return self.__origin_test_x, self.__origin_test_t
+        return self.__test_x, self.__test_t
 
     def __pre_process(self, train_x, train_t):
         """

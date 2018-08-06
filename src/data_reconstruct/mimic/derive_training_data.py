@@ -3,6 +3,7 @@ import datetime
 import os
 import random
 from xml.etree import ElementTree
+
 import numpy as np
 
 
@@ -311,6 +312,15 @@ def hawkes(reserve_diagnosis, reserve_procedure, file_path, file_name):
 
 
 def neural_nets(reserve_diagnosis, reserve_procedure, time_stamp, file_path, file_name):
+    """
+    输出经过随机排序的BTD的数据，经过核验，没有发现问题
+    :param reserve_diagnosis:
+    :param reserve_procedure:
+    :param time_stamp:
+    :param file_path:
+    :param file_name:
+    :return:
+    """
     # 返回Time Major的数据
     # index 一样的x, t，对应一样的人
     patient_x, patient_t = derive_neural_network_data(os.path.join(file_path, file_name),

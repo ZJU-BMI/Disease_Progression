@@ -8,29 +8,24 @@ from tensorflow.python.ops import nn_ops
 
 class RevisedGRUCell(object):
     """
-    compared to standard rnn cell, this version of gru can accept time information
+    compared to standard rnn cell, this version of gru can accept time information directly
     """
 
     def __init__(self, hidden_state, initial_strategy_map, name, activation):
         """
-        :param hidden_state: integer
+        :param hidden_state
         :param initial_strategy_map: should contain initializer objects with key gate_weight, gate_bias,
         candidate_weight, candidate_bias
         :param name:
-        :param activation: activation function object, e.g., tf.tanh
+        :param activation: name of activation function
         """
         self.__hidden_state = hidden_state
-        if activation == 'tanh':
-            self.__activation = tf.tanh
-        elif activation == 'sigmoid':
-            self.__activation = tf.sigmoid
-        elif activation == 'relu':
-            self.__activation = tf.nn.relu
-
         self.__name = name
         self.__initial_strategy_map = initial_strategy_map
+        self.__activation_name = activation
 
         # define parameters
+        self.__activation = None
         self.__gate_weight = None
         self.__gate_bias = None
         self.__candidate_weight = None
@@ -41,10 +36,8 @@ class RevisedGRUCell(object):
         self.__x_depth = None
 
         self.__built = False
-        self.__para_name_map = {'gate_weight': 'gate_weight', 'gate_bias': 'gate_bias',
-                                'candidate_weight': 'candidate_weight', 'candidate_bias': 'candidate_bias'}
 
-        self.__parameter_validation()
+        self.__parameter_check()
 
     def __build(self, x_depth, t_depth):
         """
@@ -53,10 +46,10 @@ class RevisedGRUCell(object):
         :param t_depth: int
         :return:
         """
-        gw = self.__initial_strategy_map[self.__para_name_map['gate_weight']]
-        gb = self.__initial_strategy_map[self.__para_name_map['gate_bias']]
-        cw = self.__initial_strategy_map[self.__para_name_map['candidate_weight']]
-        cb = self.__initial_strategy_map[self.__para_name_map['candidate_bias']]
+        gw = self.__initial_strategy_map['gate_weight']
+        gb = self.__initial_strategy_map['gate_bias']
+        cw = self.__initial_strategy_map['candidate_weight']
+        cb = self.__initial_strategy_map['candidate_bias']
 
         # define the parameter a GRU cell
         with tf.variable_scope("cell_para", reuse=tf.AUTO_REUSE):
@@ -73,8 +66,8 @@ class RevisedGRUCell(object):
 
     def __call__(self, input_x, input_t, previous_sate):
         """
-        :param input_x: tf.placeholder with shape [batch_size, input_depth], dtype=tf.float64
-        :param input_t: tf.placeholder a matrix with shape [batch_size, 1], dtype=tf.float64
+        :param input_x: tf.placeholder with shape [batch_size, input_x_depth], dtype=tf.float64
+        :param input_t: tf.placeholder a matrix with shape [batch_size, input_t_depth], dtype=tf.float64
         :param previous_sate: the previous hidden states with size [batch_size, hidden_state], dtype=tf.float64.
         if the previous state is the zero state, the size should be [batch_size,], dtype=tf.float64.
         :return: new hidden state with size [batch_size, hidden_state], dtype=tf.float64.
@@ -96,10 +89,10 @@ class RevisedGRUCell(object):
         td = self.__t_depth
         hs = self.__hidden_state
         xd = self.__x_depth
-        gw_name = self.__para_name_map['gate_weight']
-        gb_name = self.__para_name_map['gate_bias']
-        cw_name = self.__para_name_map['candidate_weight']
-        cb_name = self.__para_name_map['candidate_bias']
+        gw_name = 'gate_weight'
+        gb_name = 'gate_bias'
+        cw_name = 'candidate_weight'
+        cb_name = 'candidate_bias'
 
         with tf.variable_scope("cell_para", reuse=tf.AUTO_REUSE):
             gate_weight = tf.get_variable(gw_name, shape=[td, hs * 2], dtype=tf.float64)
@@ -127,7 +120,7 @@ class RevisedGRUCell(object):
 
         return new_h
 
-    def __parameter_validation(self):
+    def __parameter_check(self):
         """
         This function is used to examine whether the parameters are legal
         """
@@ -145,6 +138,15 @@ class RevisedGRUCell(object):
         if not legal_flag:
             raise Exception('the format of parameter is not right')
 
+        if self.__activation_name == 'tanh':
+            self.__activation = tf.tanh
+        elif self.__activation_name == 'sigmoid':
+            self.__activation_name = tf.sigmoid
+        elif self.__activation_name == 'relu':
+            self.__activation = tf.nn.relu
+        else:
+            raise ValueError('The activation should be "tanh", "sigmoid" or "relu"')
+
 
 def unit_test():
     """
@@ -155,6 +157,8 @@ def unit_test():
     x_depth = 4
     t_depth = 1
     hidden_state = 16
+    activation = 'tanh'
+    name = 'revised_gru'
     x = tf.placeholder(name='x', shape=[time_stamp, batch_size, x_depth], dtype=tf.float64)
     t = tf.placeholder(name='x', shape=[time_stamp, batch_size, t_depth], dtype=tf.float64)
     zero_state = tf.convert_to_tensor(np.random.normal(0, 1, [hidden_state]))
@@ -163,11 +167,11 @@ def unit_test():
     init['gate_bias'] = tf.random_normal_initializer(0, 1)
     init['candidate_weight'] = tf.random_normal_initializer(0, 1)
     init['candidate_bias'] = tf.random_normal_initializer(0, 1)
-
     x_list = tf.unstack(x, axis=0)
     t_list = tf.unstack(t, axis=0)
-    rgru_cell = RevisedGRUCell(hidden_state=hidden_state, initial_strategy_map=init, name='cell', activation=tf.tanh)
+    rgru_cell = RevisedGRUCell(hidden_state=hidden_state, initial_strategy_map=init, name=name, activation=activation)
     state = zero_state
+
     for i in range(0, len(x_list)):
         state = rgru_cell(input_x=x_list[i], input_t=t_list[i], previous_sate=state)
 
