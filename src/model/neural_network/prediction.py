@@ -1,8 +1,14 @@
 # coding=utf-8
+import sys
+
 import tensorflow as tf
 
+sys.path.append('rnn_config.py')
+sys.path.append('intensity.py')
+sys.path.append('attention_mechanism.py')
+sys.path.append('revised_rnn.py')
 import rnn_config as config
-from neural_network import intensity, attention_mechanism, revised_rnn
+import intensity, attention_mechanism, revised_rnn
 
 
 class AttentionMixLayer(object):
@@ -30,6 +36,7 @@ class AttentionMixLayer(object):
         """
         input_x = kwargs['input_x']
         input_t = kwargs['input_t']
+        mutual_intensity = kwargs['mutual_intensity']
         if input_x is None or input_t is None:
             raise ValueError('kwargs should contain key parameter input_x, input_t')
 
@@ -39,7 +46,7 @@ class AttentionMixLayer(object):
         with tf.name_scope('attention'):
             for time_stamp in range(0, self.__max_time_stamp):
                 with tf.name_scope('mix_state'):
-                    mix_state = self.__attention(time_stamp, hidden_tensor, input_x, input_t)
+                    mix_state = self.__attention(time_stamp, hidden_tensor, input_x, input_t, mutual_intensity)
                     mix_hidden_state_list.append(mix_state)
             mix_hidden_state_list = tf.convert_to_tensor(mix_hidden_state_list, dtype=tf.float64,
                                                          name='attention_states')
@@ -86,6 +93,7 @@ class PredictionLayer(object):
         with tf.name_scope('output'):
             # a list with length equal to time_stamp, each element has the size [batch_size, num_hidden]
             mix_hidden_state_list = tf.unstack(mix_hidden_state_list, axis=0)
+
             un_c_pred_list = []
             r_pred_list = []
             with tf.name_scope('c_output'):
@@ -121,8 +129,8 @@ class PredictionLayer(object):
                 # Revisiting Neural Networks, arxiv.org/pdf/1312.5419
                 c_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=c_label, logits=un_c_pred_list))
             with tf.name_scope('r_loss'):
-                r_loss = tf.reduce_mean(tf.losses.mean_squared_error(labels=r_label, predictions=r_pred_list),
-                                        dtype=tf.float64)
+                r_loss = tf.reduce_mean(tf.losses.mean_squared_error(labels=r_label, predictions=r_pred_list))
+                r_loss = tf.cast(r_loss, dtype=tf.float64)
 
         return c_loss, r_loss, un_c_pred_list, r_pred_list, c_label, r_label
 

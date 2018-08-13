@@ -176,32 +176,33 @@ def hawkes_eval():
     name_prefix_temp = '{}_diagnosis_{}_procedure_{}_iteration_{}_slot_{}_'
 
     # Experiment
-    iteration = 10
-    for diagnosis_reserve in [70, 50, 30, 10]:
-        for procedure_reserve in [30, 20, 10]:
-            train_data, test_data, name_index_map = \
-                hawkes_load_data(source_file_path, source_file_name, diagnosis_reserve, procedure_reserve)
+    for diagnosis_reserve in [80]:
+        for procedure_reserve in [30]:
+            for iteration in [10, 15, 20, 25, 30]:
+                train_data, test_data, name_index_map = \
+                    hawkes_load_data(source_file_path, source_file_name, diagnosis_reserve, procedure_reserve)
 
-            # save corresponding name index map
-            map_name = 'index_name_map_diagnosis_' + str(diagnosis_reserve) + '_procedure_' + str(
-                procedure_reserve) + '.csv'
-            hawkes_save_name_index_map(save_file_path, map_name, name_index_map)
+                # save corresponding name index map
+                map_name = 'index_name_map_diagnosis_' + str(diagnosis_reserve) + '_procedure_' + str(
+                    procedure_reserve) + '.csv'
+                hawkes_save_name_index_map(save_file_path, map_name, name_index_map)
 
-            for kernel in ['fourier', 'exp']:
-                if kernel == 'exp':
-                    time_slot = None
-                    parameter_map = hawkes_optimization(train_data, test_data, iteration, diagnosis_reserve,
-                                                        procedure_reserve, kernel, time_slot)
-                    name_prefix = name_prefix_temp.format(kernel, str(diagnosis_reserve), str(procedure_reserve),
-                                                          str(iteration), 'none')
-                    save_result(parameter_map, save_file_path, name_prefix)
-                else:
-                    for time_slot in [1000]:
+                for kernel in ['fourier', 'exp']:
+                    if kernel == 'exp':
+                        time_slot = None
                         parameter_map = hawkes_optimization(train_data, test_data, iteration, diagnosis_reserve,
                                                             procedure_reserve, kernel, time_slot)
                         name_prefix = name_prefix_temp.format(kernel, str(diagnosis_reserve), str(procedure_reserve),
-                                                              str(iteration), str(time_slot))
+                                                              str(iteration), 'none')
                         save_result(parameter_map, save_file_path, name_prefix)
+                    else:
+                        for time_slot in [1000]:
+                            parameter_map = hawkes_optimization(train_data, test_data, iteration, diagnosis_reserve,
+                                                                procedure_reserve, kernel, time_slot)
+                            name_prefix = name_prefix_temp.format(kernel, str(diagnosis_reserve),
+                                                                  str(procedure_reserve),
+                                                                  str(iteration), str(time_slot))
+                            save_result(parameter_map, save_file_path, name_prefix)
 
 
 if __name__ == '__main__':

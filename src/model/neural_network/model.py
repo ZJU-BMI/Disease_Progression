@@ -1,8 +1,15 @@
 # coding=utf-8
+import sys
+
 import tensorflow as tf
 
+sys.path.append('intensity.py')
+sys.path.append('rnn_config.py')
+sys.path.append('attention_mechanism.py')
+sys.path.append('revised_rnn.py')
+sys.path.append('prediction.py')
 import rnn_config as config
-from neural_network import intensity, attention_mechanism, revised_rnn, prediction
+import intensity, attention_mechanism, revised_rnn, prediction
 
 
 class ProposedModel(object):
@@ -44,12 +51,12 @@ class ProposedModel(object):
                                                           mutual_intensity_placeholder=mutual_intensity_placeholder,
                                                           decay_function_place_holder=decay_function_place_holder)
         attention_layer = prediction.AttentionMixLayer(model_configuration=model_config,
-                                                       mutual_intensity=mutual_intensity_placeholder,
                                                        revise_rnn=revise_gru_rnn, attention=attention_model)
         prediction_layer = prediction.PredictionLayer(model_configuration=model_config)
 
         # model construct
-        mix_state_list = attention_layer(input_x=placeholder_x, input_t=placeholder_t)
+        mix_state_list = attention_layer(input_x=placeholder_x, input_t=placeholder_t,
+                                         mutual_intensity=mutual_intensity_placeholder)
         c_loss, r_loss, c_pred_list, r_pred_list, c_label, r_label = \
             prediction_layer(mix_hidden_state_list=mix_state_list, input_x=placeholder_x, input_t=placeholder_t)
         prediction.performance_summary(input_x=c_label, input_t=r_label, c_pred=c_pred_list,

@@ -3,15 +3,23 @@ import csv
 import datetime
 import os
 import random
+import sys
 
 import numpy as np
 import tensorflow as tf
 
+sys.path.append('read_data.py')
+sys.path.append('rnn_config.py')
+sys.path.append('intensity.py')
+sys.path.append('model.py')
+sys.path.append('neural_network.py')
 import read_data
 import rnn_config as config
 from intensity import Intensity
 from model import ProposedModel
-from neural_network import performance_metrics as pm
+import performance_metrics as pm
+from tensorflow.python import debug as tf_debug
+
 
 
 def build_model(model_config):
@@ -42,8 +50,9 @@ def fine_tuning(train_config, node_list, data_object, summary_save_path, mutual_
     if train_config.optimizer == 'Adam':
         with tf.variable_scope('adam_para', reuse=True):
             optimizer = tf.train.AdamOptimizer
-    elif train_config.optimizer == 'default':
-        optimizer = tf.train.GradientDescentOptimizer
+    elif train_config.optimizer == 'SGD':
+        with tf.variable_scope('sgd', reuse=True):
+            optimizer = tf.train.GradientDescentOptimizer
     else:
         raise ValueError('')
     optimize_node = optimizer(train_config.learning_rate).minimize(loss)
@@ -58,7 +67,8 @@ def fine_tuning(train_config, node_list, data_object, summary_save_path, mutual_
 
     with tf.Session() as sess:
         # TODO Debugger待完成
-        # sess = tf_debug.TensorBoardDebugWrapperSession(sess, 'Sunzhoujian:6064')
+        sess = tf_debug.TensorBoardDebugWrapperSession(sess, 'Sunzhoujian:6064')
+        # sess = tf_debug.LocalCLIDebugWrapperSession(sess)
         # construct summary save path
         train_summary_save_path = os.path.join(summary_save_path, 'train')
         test_summary_save_path = os.path.join(summary_save_path, 'test')
@@ -138,35 +148,34 @@ def configuration_set():
     c_r_ratio = 1
     activation = 'tanh'
     init_map = dict()
-    init_map['gate_weight'] = tf.contrib.layers.xavier_initializer()
-    init_map['candidate_weight'] = tf.contrib.layers.xavier_initializer()
-    init_map['classification_weight'] = tf.contrib.layers.xavier_initializer()
-    init_map['regression_weight'] = tf.contrib.layers.xavier_initializer()
-    init_map['candidate_bias'] = tf.initializers.zeros()
-    init_map['classification_bias'] = tf.initializers.zeros()
-    init_map['regression_bias'] = tf.initializers.zeros()
-    init_map['gate_bias'] = tf.initializers.zeros()
+    init_map['gate_weight'] = tf.initializers.random_uniform(0.001, 0.1)
+    init_map['candidate_weight'] = tf.initializers.random_uniform(0.001, 0.1)
+    init_map['classification_weight'] = tf.initializers.random_uniform(0.001, 0.1)
+    init_map['regression_weight'] = tf.initializers.random_uniform(0.001, 0.1)
+    init_map['mutual_intensity'] = tf.initializers.random_uniform(0.001, 0.1)
+    init_map['base_intensity'] = tf.initializers.random_uniform(0.001, 0.1)
+    init_map['combine'] = tf.initializers.random_uniform(0.001, 0.1)
 
-    init_map['mutual_intensity'] = tf.contrib.layers.xavier_initializer()
-    init_map['base_intensity'] = tf.contrib.layers.xavier_initializer()
-    init_map['combine'] = tf.contrib.layers.xavier_initializer()
-
-    decay_step = 1
+    init_map['candidate_bias'] = tf.initializers.random_uniform(0.001, 0.1)
+    init_map['classification_bias'] = tf.initializers.random_uniform(0.001, 0.1)
+    init_map['regression_bias'] = tf.initializers.random_uniform(0.001, 0.1)
+    init_map['gate_bias'] = tf.initializers.random_uniform(0.001, 0.1)
     model_batch_size = None
 
     # fixed train parameters
     time = datetime.datetime.now().strftime("%H%M%S")
-    root_path = os.path.abspath('..\\..\\..') + '\\model_evaluate\\Case1\\'
-    optimizer = tf.train.AdamOptimizer
+    root_path = os.path.abspath('..\\..\\..') + '\\model_evaluate\\Case_1\\'
+    optimizer = 'SGD'
     mutual_intensity_path = os.path.join(root_path, 'mutual_intensity.csv')
     base_intensity_path = os.path.join(root_path, 'base_intensity.csv')
     decay_path = os.path.join(root_path, 'decay_function.csv')
     # TODO Learning rate decay 事实上没有实现
+    decay_step = 1
     learning_rate_decay = 0.001
     save_path = root_path+time+"\\"
     epoch = 2
-    x_path = os.path.join(root_path, '20180803194219_x.npy')
-    t_path = os.path.join(root_path, '20180803194219_t.npy')
+    x_path = os.path.join(root_path, '20180813100735_x.npy')
+    t_path = os.path.join(root_path, '20180813100735_t.npy')
     encoding = 'utf-8-sig'
 
     # random search parameter
@@ -174,8 +183,9 @@ def configuration_set():
     actual_batch_size = batch_candidate[random.randint(0, 3)]
     num_hidden_candidate = [32, 64, 128, 256]
     num_hidden = num_hidden_candidate[random.randint(0, 3)]
-    zero_state = np.zeros([num_hidden, ])
-    learning_rate = 10**random.uniform(-3, 0)
+    zero_state = np.random.uniform(0, 1, [num_hidden, ])
+    # learning_rate = 10**random.uniform(-3, 0)
+    learning_rate = 0
     threshold_candidate = [0.2, 0.3, 0.4, 0.5]
     threshold = threshold_candidate[random.randint(0, 3)]
 

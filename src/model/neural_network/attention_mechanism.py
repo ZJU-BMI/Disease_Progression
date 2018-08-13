@@ -1,7 +1,11 @@
 # coding=utf-8
+import sys
+
 import tensorflow as tf
 
 import intensity
+
+sys.path.append('rnn_config.py')
 import rnn_config as config
 
 
@@ -24,6 +28,7 @@ class HawkesBasedAttentionLayer(object):
         self.__mutual_intensity = mutual_intensity_placeholder
         self.__time_decay = decay_function_place_holder
         self.__init_argument_validation()
+        self.__mutual_parameter = None
         self.__attention_parameter()
 
     def __call__(self, time_index, hidden_tensor, input_x, input_t, mutual_intensity):
@@ -39,7 +44,6 @@ class HawkesBasedAttentionLayer(object):
         """
 
         weight = self.__calc_weight(input_x, input_t, time_index, mutual_intensity)
-
         state = []
         with tf.name_scope('mix_' + str(time_index)):
             with tf.name_scope('mix'):
@@ -50,12 +54,12 @@ class HawkesBasedAttentionLayer(object):
                 mix_state = tf.reduce_sum(state, axis=0)
         return mix_state
 
-    def __calc_weight(self, input_x, input_t, time_index, mutual_intensity):
+    def __calc_weight(self, input_x, input_t, time_index, mi_placeholder):
         """
         :param input_x:
         :param input_t:
         :param time_index: the first output has the time index equal to zero
-        :param mutual_intensity:
+        :param mi_placeholder:
         :return: a normalized hidden state weight with size [time_index+1, batch_size, 1].
         """
         time_decay_placeholder = self.__time_decay
@@ -82,15 +86,16 @@ class HawkesBasedAttentionLayer(object):
                         time_decay = tf.reduce_sum(time_decay, axis=2)
                     with tf.name_scope('weight_calc'):
                         x_t_j = input_x_list[j]
-                        single_intensity = tf.matmul(x_t_j, mutual_intensity)
+                        single_intensity = tf.matmul(x_t_j, mi_placeholder)
                         # TODO 此处是否要加入base intensity，怎么加，需要继续想，暂时先不加
                         single_intensity = tf.matmul(single_intensity, self.__mutual_parameter) * time_decay
                     intensity_sum += single_intensity
+
                 weight_list.append(intensity_sum)
             unnormalized_weight = tf.convert_to_tensor(weight_list, dtype=tf.float64)
 
         with tf.name_scope('weight'):
-            intensity_sum = tf.reduce_sum(unnormalized_weight, axis=0, keep_dims=True)
+            intensity_sum = tf.reduce_sum(unnormalized_weight, axis=0, keepdims=True)
             weight = unnormalized_weight / intensity_sum
 
         return weight

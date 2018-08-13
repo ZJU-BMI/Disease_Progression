@@ -1,6 +1,9 @@
 # coding=utf-8
+import sys
+
 import numpy as np
 
+sys.path.append('rnn_config.py')
 import rnn_config as config
 
 

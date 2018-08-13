@@ -153,7 +153,7 @@ def validate_configuration_set():
     base_intensity_path = os.path.join(all_path, 'base_intensity.csv')
     x_path = os.path.join(all_path, 'validation_x.npy')
     t_path = os.path.join(all_path, 'validation_t.npy')
-    decay_path = os.path.join(all_path, 'validation_decay_function.npy')
+    decay_path = os.path.join(all_path, 'validation_decay_function.csv')
     save_path = all_path + now_time + "\\"
     os.makedirs(save_path)
     encoding = 'utf-8-sig'
