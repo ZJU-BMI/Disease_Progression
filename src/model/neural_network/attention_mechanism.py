@@ -1,11 +1,7 @@
 # coding=utf-8
-import sys
-
 import tensorflow as tf
 
 import intensity
-
-sys.path.append('rnn_config.py')
 import rnn_config as config
 
 
@@ -21,15 +17,12 @@ class HawkesBasedAttentionLayer(object):
         corresponding(the entry's index) day
         """
         self.__x_depth = model_configuration.input_x_depth
-        self.__t_depth = model_configuration.input_t_depth
         self.__name = 'hawkes_based_attention'
         self.__init_map = model_configuration.init_map
-        self.__decay_size = model_configuration.time_decay_size
-        self.__mutual_intensity = mutual_intensity_placeholder
-        self.__time_decay = decay_function_place_holder
+        self.__time_decay_function_size = model_configuration.time_decay_size
+        self.__mutual_intensity_placeholder = mutual_intensity_placeholder
+        self.__time_decay_placeholder = decay_function_place_holder
         self.__init_argument_validation()
-        self.__mutual_parameter = None
-        self.__attention_parameter()
 
     def __call__(self, time_index, hidden_tensor, input_x, input_t, mutual_intensity):
         """
@@ -62,7 +55,7 @@ class HawkesBasedAttentionLayer(object):
         :param mi_placeholder:
         :return: a normalized hidden state weight with size [time_index+1, batch_size, 1].
         """
-        time_decay_placeholder = self.__time_decay
+        time_decay_placeholder = self.__time_decay_placeholder
 
         with tf.name_scope('data_unstack'):
             input_x_list = tf.unstack(input_x, axis=0)
@@ -70,28 +63,27 @@ class HawkesBasedAttentionLayer(object):
             input_x_list = input_x_list[0: time_index + 1]
             input_t_list = input_t_list[0: time_index + 1]
 
+        with tf.variable_scope('attention_para', reuse=tf.AUTO_REUSE):
+            mutual = tf.get_variable(name='mutual', shape=[self.__x_depth, 1], dtype=tf.float64,
+                                     initializer=self.__init_map['mutual_intensity'])
+
         with tf.name_scope('unnormal_weight'):
             last_time = input_t_list[time_index][0]
             weight_list = []
 
             # calculate weight
             for i in range(0, time_index + 1):
-                intensity_sum = 0
-                for j in range(0, i + 1):
-                    with tf.name_scope('time_calc'):
-                        time_interval = tf.cast(last_time - input_t[j], dtype=tf.int64)
-                        time_onehot = tf.one_hot(time_interval, self.__decay_size, dtype=tf.float64)
-                    with tf.name_scope('decay_calc'):
+                with tf.name_scope('time_calc'):
+                    time_interval = tf.cast(last_time - input_t[i], dtype=tf.int64)
+                    time_onehot = tf.one_hot(time_interval, self.__time_decay_function_size, dtype=tf.float64)
+                with tf.name_scope('decay_calc'):
                         time_decay = time_onehot * time_decay_placeholder
                         time_decay = tf.reduce_sum(time_decay, axis=2)
-                    with tf.name_scope('weight_calc'):
-                        x_t_j = input_x_list[j]
-                        single_intensity = tf.matmul(x_t_j, mi_placeholder)
-                        # TODO 此处是否要加入base intensity，怎么加，需要继续想，暂时先不加
-                        single_intensity = tf.matmul(single_intensity, self.__mutual_parameter) * time_decay
-                    intensity_sum += single_intensity
-
-                weight_list.append(intensity_sum)
+                with tf.name_scope('weight_calc'):
+                    x_t_j = input_x_list[i]
+                    single_intensity = tf.matmul(x_t_j, mi_placeholder)
+                    single_intensity = tf.matmul(single_intensity, mutual) * time_decay
+                weight_list.append(single_intensity)
             unnormalized_weight = tf.convert_to_tensor(weight_list, dtype=tf.float64)
 
         with tf.name_scope('weight'):
@@ -103,13 +95,6 @@ class HawkesBasedAttentionLayer(object):
     def __init_argument_validation(self):
         if not (self.__init_map.__contains__('mutual_intensity') and self.__init_map.__contains__('combine')):
             raise ValueError('init map should contain elements with name, mutual_intensity, combine')
-
-    def __attention_parameter(self):
-        size = self.__x_depth
-        with tf.variable_scope('attention_para', reuse=tf.AUTO_REUSE):
-            mutual = tf.get_variable(name='mutual', shape=[size, 1], dtype=tf.float64,
-                                     initializer=self.__init_map['mutual_intensity'])
-            self.__mutual_parameter = mutual
 
 
 def unit_test():

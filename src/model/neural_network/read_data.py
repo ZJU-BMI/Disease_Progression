@@ -1,9 +1,6 @@
 # coding=utf-8
-import sys
-
 import numpy as np
 
-sys.path.append('rnn_config.py')
 import rnn_config as config
 
 
@@ -17,7 +14,6 @@ class LoadData(object):
         self.__x_path = train_config.x_path
         self.__t_path = train_config.t_path
         self.__time_length = model_config.max_time_stamp
-        self.__global_batch_index = 0
         self.__x_depth = model_config.input_x_depth
         self.__t_depth = model_config.input_t_depth
         self.__batch_count = None
@@ -30,6 +26,7 @@ class LoadData(object):
         self.__origin_train_x = train_x
         self.__origin_train_t = train_t
         self.__batch_train_x, self.__batch_train_t = self.__pre_process(self.__origin_train_x, self.__origin_train_t)
+        self.__global_batch_index = 0
 
     def get_batch_count(self):
         return self.__batch_count
@@ -85,7 +82,7 @@ class LoadData(object):
         train_data = np.concatenate((train_x, train_t), axis=2)
         np.random.shuffle(train_data)
 
-        train_x = train_data[:, :, 0:-1]
+        train_x = train_data[:, :, 0: -1]
         train_t = train_data[:, :, -1]
         train_t = train_t[:, :, np.newaxis]
 

@@ -23,29 +23,33 @@ class RevisedGRUCell(object):
         self.__name = name
         self.__initial_strategy_map = initial_strategy_map
         self.__activation_name = activation
-
-        # define parameters
-        self.__activation = None
-        self.__gate_weight = None
-        self.__gate_bias = None
-        self.__candidate_weight = None
-        self.__candidate_bias = None
-
-        # define weight and input shape
-        self.__t_depth = None
-        self.__x_depth = None
-
-        self.__built = False
+        if self.__activation_name == 'tanh':
+            self.__activation = tf.tanh
+        elif self.__activation_name == 'sigmoid':
+            self.__activation_name = tf.sigmoid
+        elif self.__activation_name == 'relu':
+            self.__activation = tf.nn.relu
+        else:
+            raise ValueError('The activation should be "tanh", "sigmoid" or "relu"')
 
         self.__parameter_check()
 
-    def __build(self, x_depth, t_depth):
+    def __call__(self, input_x, input_t, previous_sate):
         """
-        initialize relevant parameters
-        :param x_depth: int
-        :param t_depth: int
-        :return:
+        :param input_x: tf.placeholder with shape [batch_size, input_x_depth], dtype=tf.float64
+        :param input_t: tf.placeholder a matrix with shape [batch_size, input_t_depth], dtype=tf.float64
+        :param previous_sate: the previous hidden states is a tensor with size [batch_size, hidden_state],
+        dtype=tf.float64. if the previous state is the zero state, the size should be [batch_size,], dtype=tf.float64.
+        :return: new hidden state with size [batch_size, hidden_state], dtype=tf.float64.
         """
+        if (previous_sate.shape.dims == 1 and previous_sate.shape[0].value != self.__hidden_state) or \
+                (previous_sate.shape.dims == 2 and previous_sate.shape[1].value != self.__hidden_state):
+            raise ValueError('previous state/ zero state size incompatible')
+
+        # get predefined variable
+        td = input_t.shape[1].value
+        hs = self.__hidden_state
+        xd = input_x.shape[1].value
         gw = self.__initial_strategy_map['gate_weight']
         gb = self.__initial_strategy_map['gate_bias']
         cw = self.__initial_strategy_map['candidate_weight']
@@ -53,52 +57,11 @@ class RevisedGRUCell(object):
 
         # define the parameter a GRU cell
         with tf.variable_scope("cell_para", reuse=tf.AUTO_REUSE):
-            self.__gate_weight = tf.get_variable(name='gate_weight', shape=[t_depth, self.__hidden_state * 2],
-                                                 initializer=gw, dtype=tf.float64)
-            self.__gate_bias = tf.get_variable(name='gate_bias', shape=[self.__hidden_state * 2], initializer=gb,
+            gate_weight = tf.get_variable(name='gate_weight', shape=[td, hs * 2], initializer=gw, dtype=tf.float64)
+            gate_bias = tf.get_variable(name='gate_bias', shape=[hs * 2], initializer=gb, dtype=tf.float64)
+            candidate_weight = tf.get_variable(name='candidate_weight', shape=[xd + hs, hs], initializer=cw,
                                                dtype=tf.float64)
-            self.__candidate_weight = tf.get_variable(name='candidate_weight',
-                                                      shape=[x_depth + self.__hidden_state, self.__hidden_state],
-                                                      initializer=cw, dtype=tf.float64)
-            self.__candidate_bias = tf.get_variable(name='candidate_bias', shape=[self.__hidden_state],
-                                                    initializer=cb, dtype=tf.float64)
-        self.__built = True
-
-    def __call__(self, input_x, input_t, previous_sate):
-        """
-        :param input_x: tf.placeholder with shape [batch_size, input_x_depth], dtype=tf.float64
-        :param input_t: tf.placeholder a matrix with shape [batch_size, input_t_depth], dtype=tf.float64
-        :param previous_sate: the previous hidden states with size [batch_size, hidden_state], dtype=tf.float64.
-        if the previous state is the zero state, the size should be [batch_size,], dtype=tf.float64.
-        :return: new hidden state with size [batch_size, hidden_state], dtype=tf.float64.
-        """
-        if not self.__built:
-            self.__x_depth = input_x.shape[1].value
-            self.__t_depth = input_t.shape[1].value
-            self.__build(x_depth=self.__x_depth, t_depth=self.__t_depth)
-        else:
-            if self.__x_depth != input_x.shape[1].value:
-                raise ValueError('x depth inconsistent')
-            if self.__t_depth != input_t.shape[1].value:
-                raise ValueError('t depth inconsistent')
-            if (previous_sate.shape.dims == 1 and previous_sate.shape[0].value != self.__hidden_state) or \
-                    (previous_sate.shape.dims == 2 and previous_sate.shape[1].value != self.__hidden_state):
-                raise ValueError('previous state/ zero state size incompatible')
-
-        # get predefined variable
-        td = self.__t_depth
-        hs = self.__hidden_state
-        xd = self.__x_depth
-        gw_name = 'gate_weight'
-        gb_name = 'gate_bias'
-        cw_name = 'candidate_weight'
-        cb_name = 'candidate_bias'
-
-        with tf.variable_scope("cell_para", reuse=tf.AUTO_REUSE):
-            gate_weight = tf.get_variable(gw_name, shape=[td, hs * 2], dtype=tf.float64)
-            gate_bias = tf.get_variable(gb_name, shape=[hs * 2], dtype=tf.float64)
-            candidate_weight = tf.get_variable(cw_name, shape=[xd + hs, hs], dtype=tf.float64)
-            candidate_bias = tf.get_variable(cb_name, shape=[hs], dtype=tf.float64)
+            candidate_bias = tf.get_variable(name='candidate_bias', shape=[hs], initializer=cb, dtype=tf.float64)
 
         with tf.name_scope('gate_calc'):
             gate_value = math_ops.matmul(input_t, gate_weight)
@@ -137,15 +100,6 @@ class RevisedGRUCell(object):
 
         if not legal_flag:
             raise Exception('the format of parameter is not right')
-
-        if self.__activation_name == 'tanh':
-            self.__activation = tf.tanh
-        elif self.__activation_name == 'sigmoid':
-            self.__activation_name = tf.sigmoid
-        elif self.__activation_name == 'relu':
-            self.__activation = tf.nn.relu
-        else:
-            raise ValueError('The activation should be "tanh", "sigmoid" or "relu"')
 
 
 def unit_test():

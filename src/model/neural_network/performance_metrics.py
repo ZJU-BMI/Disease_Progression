@@ -37,6 +37,7 @@ def performance_measure(c_pred, r_pred, c_label, r_label, input_depth, threshold
     coverage = sk_metric.coverage_error(c_label, c_pred_label)
     rank_loss = sk_metric.label_ranking_loss(c_label, c_pred_label)
     average_precision = sk_metric.average_precision_score(c_label, c_pred_label)
+    # TODO AUC尚未列入统计
     # macro_auc = sk_metric.roc_auc_score(c_label, c_pred_label, average='macro')
     # micro_auc = sk_metric.roc_auc_score(c_label, c_pred_label, average='micro')
     time_dev = np.sum(np.abs(r_pred - r_label))
@@ -76,13 +77,3 @@ def save_result(path, file_name, data):
     with open(os.path.join(path, file_name), 'w', encoding='utf-8-sig', newline="") as file:
         csv_writer = csv.writer(file)
         csv_writer.writerows(matrix_to_write)
-
-
-def auc(prediction, label, num_threshold, **kwargs):
-    """
-    :param prediction:
-    :param label:
-    :param num_threshold:
-    :param kwargs:
-    :return:
-    """

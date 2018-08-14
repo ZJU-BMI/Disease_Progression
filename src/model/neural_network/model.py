@@ -1,15 +1,11 @@
 # coding=utf-8
-import sys
-
 import tensorflow as tf
 
-sys.path.append('intensity.py')
-sys.path.append('rnn_config.py')
-sys.path.append('attention_mechanism.py')
-sys.path.append('revised_rnn.py')
-sys.path.append('prediction.py')
+import attention_mechanism
+import intensity
+import prediction
+import revised_rnn
 import rnn_config as config
-import intensity, attention_mechanism, revised_rnn, prediction
 
 
 class ProposedModel(object):
@@ -25,7 +21,7 @@ class ProposedModel(object):
         self.r_pred_list = None
         self.placeholder_x = None
         self.placeholder_t = None
-        self.mi = None
+        self.placeholder_mi = None
         self.placeholder_time_decay = None
 
     def __call__(self, **kwargs):
@@ -45,13 +41,12 @@ class ProposedModel(object):
         model_config = self.model_config
         # component define
         revise_gru_rnn = revised_rnn.RevisedRNN(model_configuration=model_config)
-
         attention_model = \
             attention_mechanism.HawkesBasedAttentionLayer(model_configuration=model_config,
                                                           mutual_intensity_placeholder=mutual_intensity_placeholder,
                                                           decay_function_place_holder=decay_function_place_holder)
-        attention_layer = prediction.AttentionMixLayer(model_configuration=model_config,
-                                                       revise_rnn=revise_gru_rnn, attention=attention_model)
+        attention_layer = prediction.AttentionMixLayer(model_configuration=model_config, revise_rnn=revise_gru_rnn,
+                                                       attention=attention_model)
         prediction_layer = prediction.PredictionLayer(model_configuration=model_config)
 
         # model construct
@@ -72,9 +67,9 @@ class ProposedModel(object):
             tf.summary.scalar('r_loss', r_loss)
             tf.summary.scalar('sum_loss', self.loss)
 
-        self.mi = mutual_intensity_placeholder
+        self.placeholder_mi = mutual_intensity_placeholder
         self.placeholder_time_decay = decay_function_place_holder
-        return self.loss, c_pred_list, r_pred_list, self.mi, decay_function_place_holder
+        return self.loss, c_pred_list, r_pred_list, self.placeholder_mi, decay_function_place_holder
 
 
 def unit_test():

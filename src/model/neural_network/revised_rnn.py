@@ -1,13 +1,9 @@
 # coding=utf-8
-import sys
-
 import numpy as np
 import tensorflow as tf
 
-sys.path.append('rnn_config.py')
-sys.path.append('revised_rnn_cell.py')
-import rnn_config as config
 import revised_rnn_cell as rrc
+import rnn_config as config
 
 
 class RevisedRNN(object):
@@ -21,7 +17,7 @@ class RevisedRNN(object):
         init_map: parameter strategy map, at least contain 4 elements with key 'gate_weight',
         'gate_bias', 'candidate_weight', 'candidate_bias'. each key corresponds to a tf.Variable initializer
         activation: string,
-        zero_state: the zero state of rnn with size [hidden_state]
+        zero_state: the zero state is a tensor with size [hidden_state]
         cell_type: default revised_gru
         """
         self.__time_stamp = model_configuration.max_time_stamp
@@ -29,7 +25,7 @@ class RevisedRNN(object):
         self.__t_depth = model_configuration.input_t_depth
         self.__hidden_state = model_configuration.num_hidden
         self.__init_map = model_configuration.init_map
-        self.__zero_state = model_configuration.zero_state
+        self.__zero_state = tf.convert_to_tensor(model_configuration.zero_state, tf.float64)
         self.__activation = model_configuration.activation
         self.__cell_type = model_configuration.cell_type
 
@@ -38,14 +34,11 @@ class RevisedRNN(object):
         # 留待以后有空了做
         if self.__cell_type != 'revised_gru':
             raise ValueError('other type unsupported yet')
-        self.__rnn_cell = self.__cell_type
-        self.__build()
+        else:
+            with tf.name_scope('RRNN_input'):
+                self.rnn_cell = rrc.RevisedGRUCell(self.__hidden_state, self.__init_map, 'rgru_cell', self.__activation)
 
         print('initialize rnn and build network accomplished')
-
-    def __build(self):
-        with tf.name_scope('RRNN_input'):
-            self.rnn_cell = rrc.RevisedGRUCell(self.__hidden_state, self.__init_map, 'rgru_cell', self.__activation)
 
     def __call__(self, input_x, input_t):
         """
@@ -55,7 +48,6 @@ class RevisedRNN(object):
         :return: a tensor consists of all hidden states with size [time_stamp, batch_size, hidden_state]
         """
         self.__argument_validation(input_x, input_t)
-
         state = self.__zero_state
         states_list = list()
 
@@ -71,7 +63,6 @@ class RevisedRNN(object):
                     state = self.rnn_cell(input_x=step_i_x, input_t=step_i_t, previous_sate=state)
                 states_list.append(state)
             states_tensor = tf.convert_to_tensor(states_list, dtype=tf.float64)
-            self.states_tensor = states_tensor
         return states_tensor
 
     def __argument_validation(self, input_x, input_t):

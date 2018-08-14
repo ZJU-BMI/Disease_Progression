@@ -1,14 +1,10 @@
 # coding=utf-8
-import sys
-
 import tensorflow as tf
 
-sys.path.append('rnn_config.py')
-sys.path.append('intensity.py')
-sys.path.append('attention_mechanism.py')
-sys.path.append('revised_rnn.py')
+import attention_mechanism
+import intensity
+import revised_rnn
 import rnn_config as config
-import intensity, attention_mechanism, revised_rnn
 
 
 class AttentionMixLayer(object):
@@ -59,19 +55,6 @@ class PredictionLayer(object):
         self.__num_hidden = model_configuration.num_hidden
         self.__t_depth = model_configuration.input_t_depth
         self.__x_depth = model_configuration.input_x_depth
-        self.__c_weight, self.__c_bias, self.__r_weight, self.__r_bias = self.__output_parameter()
-
-    def __output_parameter(self):
-        with tf.variable_scope('pred_para', reuse=tf.AUTO_REUSE):
-            c_weight = tf.get_variable(name='classification_weight', shape=[self.__num_hidden, self.__x_depth],
-                                       initializer=self.__init_map["classification_weight"], dtype=tf.float64)
-            c_bias = tf.get_variable(name='classification_bias', shape=[self.__x_depth],
-                                     initializer=self.__init_map["classification_bias"], dtype=tf.float64)
-            r_weight = tf.get_variable(name='regression_weight', shape=[self.__num_hidden, self.__t_depth],
-                                       initializer=self.__init_map["regression_weight"], dtype=tf.float64)
-            r_bias = tf.get_variable(name='regression_bias', shape=[1, ],
-                                     initializer=self.__init_map["regression_bias"], dtype=tf.float64)
-        return c_weight, c_bias, r_weight, r_bias
 
     def __call__(self, **kwargs):
         """
@@ -90,6 +73,16 @@ class PredictionLayer(object):
         if input_x is None or input_t is None or mix_hidden_state_list is None:
             raise ValueError('kwargs should contain key parameter input_x, input_t, and mix_hidden_state_list')
 
+        with tf.variable_scope('pred_para', reuse=tf.AUTO_REUSE):
+            c_weight = tf.get_variable(name='classification_weight', shape=[self.__num_hidden, self.__x_depth],
+                                       initializer=self.__init_map["classification_weight"], dtype=tf.float64)
+            c_bias = tf.get_variable(name='classification_bias', shape=[self.__x_depth],
+                                     initializer=self.__init_map["classification_bias"], dtype=tf.float64)
+            r_weight = tf.get_variable(name='regression_weight', shape=[self.__num_hidden, self.__t_depth],
+                                       initializer=self.__init_map["regression_weight"], dtype=tf.float64)
+            r_bias = tf.get_variable(name='regression_bias', shape=[1, ],
+                                     initializer=self.__init_map["regression_bias"], dtype=tf.float64)
+
         with tf.name_scope('output'):
             # a list with length equal to time_stamp, each element has the size [batch_size, num_hidden]
             mix_hidden_state_list = tf.unstack(mix_hidden_state_list, axis=0)
@@ -98,16 +91,14 @@ class PredictionLayer(object):
             r_pred_list = []
             with tf.name_scope('c_output'):
                 for state in mix_hidden_state_list:
-                    un_c_pred = tf.matmul(state, self.__c_weight) + self.__c_bias
+                    un_c_pred = tf.matmul(state, c_weight) + c_bias
                     un_c_pred_list.append(un_c_pred)
                 un_c_pred_list = tf.convert_to_tensor(un_c_pred_list)
-                self.c_pred_node = un_c_pred_list
             with tf.name_scope('r_output'):
                 for state in mix_hidden_state_list:
-                    r_pred = tf.matmul(state, self.__r_weight) + self.__r_bias
+                    r_pred = tf.matmul(state, r_weight) + r_bias
                     r_pred_list.append(r_pred)
                 r_pred_list = tf.convert_to_tensor(r_pred_list)
-                self.r_pred_node = r_pred_list
 
         # pred next events based on the previous information, so we don't predict the last input.
         with tf.name_scope('discard_last'):
@@ -120,10 +111,12 @@ class PredictionLayer(object):
         with tf.name_scope('loss'):
             # for the requirement of data structure, we need to truncate data or pad zero. The output of padding
             # state is useless
+
             with tf.name_scope('value_clip'):
                 meaningful_data = tf.reduce_max(c_label, axis=2, keepdims=True)
                 r_pred_list = r_pred_list * meaningful_data
                 un_c_pred_list = un_c_pred_list * meaningful_data
+
             with tf.name_scope('c_loss'):
                 # we use the binary entropy loss function proposed in Large-scale Multi-label Text Classification -
                 # Revisiting Neural Networks, arxiv.org/pdf/1312.5419
@@ -132,7 +125,10 @@ class PredictionLayer(object):
                 r_loss = tf.reduce_mean(tf.losses.mean_squared_error(labels=r_label, predictions=r_pred_list))
                 r_loss = tf.cast(r_loss, dtype=tf.float64)
 
-        return c_loss, r_loss, un_c_pred_list, r_pred_list, c_label, r_label
+        with tf.name_scope('normal_c'):
+            c_pred_list = tf.sigmoid(un_c_pred_list)
+
+        return c_loss, r_loss, c_pred_list, r_pred_list, c_label, r_label
 
 
 def performance_summary(input_x, input_t, c_pred, r_pred, threshold):
@@ -152,80 +148,24 @@ def performance_summary(input_x, input_t, c_pred, r_pred, threshold):
         fnn = tf.reduce_sum(tf.cast(tf.logical_not(pred_label), dtype=tf.float64)) - tnn
         return tpn, tnn, fpn, fnn
 
-    # AUC 性能过于糟糕，等以后再补充
-    """
-    def __auc(x, prediction, num_threshold=200):
-        step = 1.0 / num_threshold
-        threshold_list = [step * (thres + 1) for thres in range(0, num_threshold)]
-        tpr_list = []
-        fpr_list = []
-        for th in threshold_list:
-            tpn, tnn, fpn, fnn = __confusion_matrix(x, prediction, th)
-            fpr_list.append(fpn / (fpn + tpn))
-            tpr_list.append(tpn / (fpn + tpn))
-
-        auc = 0
-        previous_fpr = tf.constant(0, dtype=tf.float64)
-        previous_tpr = tf.constant(0, dtype=tf.float64)
-
-        def auc_function_1(auc_, tpr_, fpr_, p_tpr, p_fpr):
-            auc_ += p_tpr * (fpr_ - p_fpr)
-            auc_ += 0.5 * (tpr_ - p_tpr) * (fpr_ - p_fpr)
-            p_tpr = tpr_
-            p_fpr = fpr_
-            return auc_, p_tpr, p_fpr
-
-        def auc_function_2(auc_, tpr_, fpr_, p_tpr, p_fpr):
-            return tf.convert_to_tensor(auc_, dtype=tf.float64), p_tpr, p_fpr
-
-        def auc_function_3(auc_, tpr_, fpr_, p_tpr, p_fpr):
-            auc_ += tpr_ * (fpr_ - p_fpr)
-            return auc_, p_tpr, p_fpr
-
-        def auc_function_4(condition, auc_, tpr_, fpr_, p_tpr, p_fpr):
-            return tf.cond(condition, lambda: auc_function_1(auc_, tpr_, fpr_, p_tpr, p_fpr),
-                           lambda: auc_function_2(auc_, tpr_, fpr_, p_tpr, p_fpr))
-
-        def auc_function_5(condition, auc_, tpr_, fpr_, p_tpr, p_fpr):
-            return tf.cond(condition, lambda: auc_function_3(auc_, tpr_, fpr_, p_tpr, p_fpr),
-                           lambda: auc_function_2(auc_, tpr_, fpr_, p_tpr, p_fpr))
-
-        for j in range(0, len(threshold_list)):
-            tpr = tpr_list[j]
-            fpr = fpr_list[j]
-            condition_1 = tf.cond(tf.greater(tpr, previous_tpr), lambda: True, lambda: False)
-            condition_2 = tf.cond(tf.greater(fpr, previous_fpr), lambda: True, lambda: False)
-
-            auc, previous_tpr, previous_fpr = \
-                tf.cond(condition_1,
-                        lambda: auc_function_4(condition_2, auc, tpr, fpr, previous_tpr, previous_fpr),
-                        lambda: auc_function_5(condition_2, auc, tpr, fpr, previous_tpr, previous_fpr))
-
-        return auc
-    """
-
     with tf.name_scope('performance'):
-        with tf.name_scope('confusion_matrix'):
-            tp, tn, fp, fn = __confusion_matrix(input_x, c_pred, threshold)
-
         """
         with tf.name_scope('macro_auc'):
+            label = tf.reshape(input_x, [1, -1])
+            pred = tf.reshape(c_pred, [1, -1])
+            macro_auc = auc_eval.auc(labels=label, predictions=pred)
+            tf.summary.scalar('macro_auc', tf.reduce_mean(macro_auc))
+        
+        with tf.name_scope('micro_auc'):
             label = tf.unstack(input_x, axis=2)
             pred = tf.unstack(c_pred, axis=2)
-            auc_sum = []
+            micro_auc = 0
             for i in range(0, len(label)):
-                auc_sum.append(__auc(label[i], pred[i], num_threshold=200))
-            auc_sum = tf.convert_to_tensor(auc_sum)
-            tf.summary.scalar('macro_auc', tf.reduce_mean(auc_sum))
-        with tf.name_scope('micro_auc'):
-            label = tf.unstack(input_x, axis=0)
-            pred = tf.unstack(c_pred, axis=0)
-            auc_sum = []
-            for i in range(0, len(label)):
-                auc_sum.append(__auc(label[i], pred[i], num_threshold=200))
-            auc_sum = tf.convert_to_tensor(auc_sum)
-            tf.summary.scalar('micro_auc', tf.reduce_mean(auc_sum))
+                micro_auc += auc_eval.auc(labels=label[i], predictions=pred[i])
+            tf.summary.scalar('micro_auc', micro_auc/len(label))
         """
+        with tf.name_scope('confusion_matrix'):
+            tp, tn, fp, fn = __confusion_matrix(input_x, c_pred, threshold)
 
         with tf.name_scope('acc'):
             acc = (tp + tn) / (tp + tn + fp + fn)
@@ -267,7 +207,7 @@ def unit_test():
     prediction_layer = PredictionLayer(model_configuration=model_config)
 
     # model construct
-    mix_state_list = attention_layer(input_x=placeholder_x, input_t=placeholder_t)
+    mix_state_list = attention_layer(input_x=placeholder_x, input_t=placeholder_t, mutual_intensity=mutual_intensity)
     c_loss, r_loss, c_pred_list, r_pred_list, c_label, r_label = \
         prediction_layer(mix_hidden_state_list=mix_state_list, input_x=placeholder_x, input_t=placeholder_t)
 

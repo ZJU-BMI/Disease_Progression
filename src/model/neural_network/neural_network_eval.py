@@ -3,23 +3,15 @@ import csv
 import datetime
 import os
 import random
-import sys
 
 import numpy as np
 import tensorflow as tf
 
-sys.path.append('read_data.py')
-sys.path.append('rnn_config.py')
-sys.path.append('intensity.py')
-sys.path.append('model.py')
-sys.path.append('neural_network.py')
+import performance_metrics as pm
 import read_data
 import rnn_config as config
 from intensity import Intensity
 from model import ProposedModel
-import performance_metrics as pm
-from tensorflow.python import debug as tf_debug
-
 
 
 def build_model(model_config):
@@ -58,17 +50,14 @@ def fine_tuning(train_config, node_list, data_object, summary_save_path, mutual_
     optimize_node = optimizer(train_config.learning_rate).minimize(loss)
     initializer = tf.global_variables_initializer()
     batch_count = data_object.get_batch_count()
-
     merged_summary = tf.summary.merge_all()
-    saver = tf.train.Saver()
 
+    saver = tf.train.Saver()
     train_metric_list = list()
     test_metric_list = list()
 
     with tf.Session() as sess:
-        # TODO Debugger待完成
-        sess = tf_debug.TensorBoardDebugWrapperSession(sess, 'Sunzhoujian:6064')
-        # sess = tf_debug.LocalCLIDebugWrapperSession(sess)
+        # sess = tf_debug.TensorBoardDebugWrapperSession(sess, 'Sunzhoujian:6064')
         # construct summary save path
         train_summary_save_path = os.path.join(summary_save_path, 'train')
         test_summary_save_path = os.path.join(summary_save_path, 'test')
@@ -92,9 +81,8 @@ def fine_tuning(train_config, node_list, data_object, summary_save_path, mutual_
 
                 train_dict = {placeholder_x: train_x, placeholder_t: train_t, mi: mutual_intensity_data,
                               time_decay: time_decay_data}
-                _, c_pred, r_pred, summary = sess.run([optimize_node, c_pred_list, r_pred_list, merged_summary],
-                                                      feed_dict=train_dict)
-                # Summary node 写错了
+                c_pred, r_pred, summary = sess.run([c_pred_list, r_pred_list, merged_summary], feed_dict=train_dict)
+                _ = sess.run([optimize_node], feed_dict=train_dict)
                 train_summary.add_summary(summary, i * batch_count + j)
                 metric_result = pm.performance_measure(c_pred, r_pred, train_x[1:max_time_stamp],
                                                        train_t[1:max_time_stamp], max_time_stamp - 1, actual_batch_size)
@@ -115,8 +103,7 @@ def fine_tuning(train_config, node_list, data_object, summary_save_path, mutual_
             max_time_stamp = len(test_x)
             test_dict = {placeholder_x: test_x, placeholder_t: test_t, mi: mutual_intensity_data,
                          time_decay: time_decay_data}
-            c_pred, r_pred, summary = sess.run([c_pred_list, r_pred_list, merged_summary],
-                                               feed_dict=test_dict)
+            c_pred, r_pred, summary = sess.run([c_pred_list, r_pred_list, merged_summary], feed_dict=test_dict)
             metric_result = pm.performance_measure(c_pred, r_pred, test_x[1:max_time_stamp], test_t[1:max_time_stamp],
                                                    max_time_stamp - 1, actual_batch_size)
             test_metric_list.append([i, None, metric_result])
@@ -148,18 +135,18 @@ def configuration_set():
     c_r_ratio = 1
     activation = 'tanh'
     init_map = dict()
-    init_map['gate_weight'] = tf.initializers.random_uniform(0.001, 0.1)
-    init_map['candidate_weight'] = tf.initializers.random_uniform(0.001, 0.1)
-    init_map['classification_weight'] = tf.initializers.random_uniform(0.001, 0.1)
-    init_map['regression_weight'] = tf.initializers.random_uniform(0.001, 0.1)
-    init_map['mutual_intensity'] = tf.initializers.random_uniform(0.001, 0.1)
-    init_map['base_intensity'] = tf.initializers.random_uniform(0.001, 0.1)
-    init_map['combine'] = tf.initializers.random_uniform(0.001, 0.1)
+    init_map['gate_weight'] = tf.contrib.layers.xavier_initializer()
+    init_map['candidate_weight'] = tf.contrib.layers.xavier_initializer()
+    init_map['classification_weight'] = tf.contrib.layers.xavier_initializer()
+    init_map['regression_weight'] = tf.contrib.layers.xavier_initializer()
+    init_map['mutual_intensity'] = tf.contrib.layers.xavier_initializer()
+    init_map['base_intensity'] = tf.contrib.layers.xavier_initializer()
+    init_map['combine'] = tf.contrib.layers.xavier_initializer()
 
-    init_map['candidate_bias'] = tf.initializers.random_uniform(0.001, 0.1)
-    init_map['classification_bias'] = tf.initializers.random_uniform(0.001, 0.1)
-    init_map['regression_bias'] = tf.initializers.random_uniform(0.001, 0.1)
-    init_map['gate_bias'] = tf.initializers.random_uniform(0.001, 0.1)
+    init_map['candidate_bias'] = tf.initializers.zeros()
+    init_map['classification_bias'] = tf.initializers.zeros()
+    init_map['regression_bias'] = tf.initializers.zeros()
+    init_map['gate_bias'] = tf.initializers.zeros()
     model_batch_size = None
 
     # fixed train parameters
@@ -225,9 +212,9 @@ def validation_test():
             data_object = read_data.LoadData(train_config=train_config, model_config=model_config)
             key_node_list = build_model(model_config)
             mutual_intensity_data = \
-                Intensity.read_mutual_intensity(encoding=train_config.encoding,
-                                                mutual_intensity_path=train_config.mutual_intensity_path,
-                                                size=model_config.input_x_depth)
+                Intensity.read_mutual_intensity_data(encoding=train_config.encoding,
+                                                     mutual_intensity_path=train_config.mutual_intensity_path,
+                                                     size=model_config.input_x_depth)
             fine_tuning(train_config, key_node_list, data_object, train_config.save_path, mutual_intensity_data,
                         time_decay_data)
 
@@ -239,11 +226,12 @@ def main():
         with new_graph.as_default():
             train_config, model_config = configuration_set()
             time_decay_data = read_time_decay(train_config.decay_path, model_config.time_decay_size)
+            time_decay_data = np.random.uniform(0.01, 0.1, [10000])
             data_object = read_data.LoadData(train_config=train_config, model_config=model_config)
             mutual_intensity_data = \
-                Intensity.read_mutual_intensity(encoding=train_config.encoding,
-                                                mutual_intensity_path=train_config.mutual_intensity_path,
-                                                size=model_config.input_x_depth)
+                Intensity.read_mutual_intensity_data(encoding=train_config.encoding,
+                                                     mutual_intensity_path=train_config.mutual_intensity_path,
+                                                     size=model_config.input_x_depth)
             key_node_list = build_model(model_config)
             fine_tuning(train_config, key_node_list, data_object, train_config.save_path, mutual_intensity_data,
                         time_decay_data)
