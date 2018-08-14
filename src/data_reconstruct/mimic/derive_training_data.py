@@ -323,10 +323,24 @@ def neural_nets(reserve_diagnosis, reserve_procedure, time_stamp, file_path, fil
     """
     # 返回Time Major的数据
     # index 一样的x, t，对应一样的人
-    patient_x, patient_t = derive_neural_network_data(os.path.join(file_path, file_name),
-                                                      reserve_diagnosis=reserve_diagnosis,
-                                                      reserve_procedure=reserve_procedure,
-                                                      time_stamp=time_stamp)
+    patient_x_c, patient_t_c = derive_neural_network_data(os.path.join(file_path, file_name),
+                                                          reserve_diagnosis=reserve_diagnosis,
+                                                          reserve_procedure=reserve_procedure,
+                                                          time_stamp=time_stamp)
+    patient_x = []
+    patient_t = []
+    for i in range(len(patient_x_c)):
+        flag = False
+        case = patient_x_c[i]
+        for j in range(1):
+            for k in range(len(case[j])):
+                if case[j][k] == 1:
+                    flag = True
+        if flag:
+            patient_x.append(patient_x_c[i])
+            patient_t.append(patient_t_c[i])
+    patient_x = np.array(patient_x)
+    patient_t = np.array(patient_t)
 
     shuffle_list = []
     for i in range(0, len(patient_t)):

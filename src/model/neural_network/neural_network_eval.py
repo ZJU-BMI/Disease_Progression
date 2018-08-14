@@ -158,11 +158,11 @@ def configuration_set():
     decay_path = os.path.join(root_path, 'decay_function.csv')
     # TODO Learning rate decay 事实上没有实现
     decay_step = 1
-    learning_rate_decay = 0.001
+    learning_rate_decay = 0.01
     save_path = root_path+time+"\\"
     epoch = 2
-    x_path = os.path.join(root_path, '20180813100735_x.npy')
-    t_path = os.path.join(root_path, '20180813100735_t.npy')
+    x_path = os.path.join(root_path, '20180814211158_x.npy')
+    t_path = os.path.join(root_path, '20180814211158_t.npy')
     encoding = 'utf-8-sig'
 
     # random search parameter
@@ -172,7 +172,7 @@ def configuration_set():
     num_hidden = num_hidden_candidate[random.randint(0, 3)]
     zero_state = np.random.uniform(0, 1, [num_hidden, ])
     # learning_rate = 10**random.uniform(-3, 0)
-    learning_rate = 0
+    learning_rate = 0.001
     threshold_candidate = [0.2, 0.3, 0.4, 0.5]
     threshold = threshold_candidate[random.randint(0, 3)]
 
@@ -204,7 +204,7 @@ def read_time_decay(path, decay_length):
 
 
 def validation_test():
-    for i in range(0, 2):
+    for i in range(0, 100):
         new_graph = tf.Graph()
         with new_graph.as_default():
             train_config, model_config = config.validate_configuration_set()
@@ -226,7 +226,6 @@ def main():
         with new_graph.as_default():
             train_config, model_config = configuration_set()
             time_decay_data = read_time_decay(train_config.decay_path, model_config.time_decay_size)
-            time_decay_data = np.random.uniform(0.01, 0.1, [10000])
             data_object = read_data.LoadData(train_config=train_config, model_config=model_config)
             mutual_intensity_data = \
                 Intensity.read_mutual_intensity_data(encoding=train_config.encoding,
