@@ -7,6 +7,7 @@
       <sourceFolder url="file://$MODULE_DIR$/src/data_reconstruct/mimic" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src/model/neural_network" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/test" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/model/proposed_model" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/venv" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.6 (DiseaseProgression)" jdkType="Python SDK" />

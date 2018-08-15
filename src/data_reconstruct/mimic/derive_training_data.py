@@ -329,13 +329,24 @@ def neural_nets(reserve_diagnosis, reserve_procedure, time_stamp, file_path, fil
                                                           time_stamp=time_stamp)
     patient_x = []
     patient_t = []
+    # 如果有空数据，直接删除
     for i in range(len(patient_x_c)):
-        flag = False
-        case = patient_x_c[i]
-        for j in range(1):
-            for k in range(len(case[j])):
-                if case[j][k] == 1:
-                    flag = True
+        flag = True
+        single_case = patient_x_c[i]
+        for j in range(len(single_case)):
+            single_day = single_case[j]
+            day_flag = False
+            for k in range(len(single_day)):
+                single_event = single_day[k]
+                if single_event == 1:
+                    day_flag = True
+            # 如果一次事件都没有发生，则要看看是不是因为数据填充的原因，如果是，保留数据
+            if not day_flag and j != 0:
+                if patient_t_c[i][j][0] == 0:
+                    day_flag = True
+
+            flag = flag and day_flag
+
         if flag:
             patient_x.append(patient_x_c[i])
             patient_t.append(patient_t_c[i])
@@ -353,8 +364,8 @@ def neural_nets(reserve_diagnosis, reserve_procedure, time_stamp, file_path, fil
     t = t[:, :, np.newaxis]
 
     save_path = file_path + datetime.datetime.now().strftime('%Y%m%d%H%M%S')
-    np.save(save_path + '_x.npy', x)
-    np.save(save_path + '_t.npy', t)
+    np.save(save_path + '_' + str(len(x[0][0])) + '_x.npy', x)
+    np.save(save_path + '_' + str(len(x[0][0])) + '_t.npy', t)
 
 
 def main():
