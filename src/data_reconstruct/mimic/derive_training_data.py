@@ -372,7 +372,7 @@ def main():
     file_path = os.path.abspath('..\\..\\..') + '\\reconstruct_data\\mimic_3\\reconstruct\\'
     file_name = 'reconstructed.xml'
     reserve_diagnosis = 80
-    reserve_procedure = 30
+    reserve_procedure = 20
     time_stamp = 5
     # hawkes(reserve_diagnosis=reserve_diagnosis,
     #        reserve_procedure=reserve_procedure, file_path=file_path, file_name=file_name)

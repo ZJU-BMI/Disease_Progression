@@ -6,7 +6,7 @@ import rnn_config as config
 
 
 class HawkesBasedAttentionLayer(object):
-    def __init__(self, model_configuration, mutual_intensity_placeholder, decay_function_place_holder):
+    def __init__(self, model_configuration, mutual_intensity_placeholder):
         """
         :param model_configuration contains
         x_depth:
@@ -21,7 +21,6 @@ class HawkesBasedAttentionLayer(object):
         self.__init_map = model_configuration.init_map
         self.__time_decay_function_size = model_configuration.time_decay_size
         self.__mutual_intensity_placeholder = mutual_intensity_placeholder
-        self.__time_decay_placeholder = decay_function_place_holder
         self.__init_argument_validation()
 
     def __call__(self, time_index, hidden_tensor, input_x, input_t, mutual_intensity):
@@ -36,7 +35,7 @@ class HawkesBasedAttentionLayer(object):
         :return: a mix hidden state at predefined time_index
         """
 
-        weight = self.__calc_weight(input_x, input_t, time_index, mutual_intensity)
+        weight = self.__calc_weight(input_x, time_index, mutual_intensity)
         state = []
         with tf.name_scope('mix_' + str(time_index)):
             with tf.name_scope('mix'):
@@ -47,44 +46,33 @@ class HawkesBasedAttentionLayer(object):
                 mix_state = tf.reduce_sum(state, axis=0)
         return mix_state
 
-    def __calc_weight(self, input_x, input_t, time_index, mi_placeholder):
+    def __calc_weight(self, input_x, time_index, mi_placeholder):
         """
         :param input_x:
-        :param input_t:
         :param time_index: the first output has the time index equal to zero
         :param mi_placeholder:
         :return: a normalized hidden state weight with size [time_index+1, batch_size, 1].
         """
-        time_decay_placeholder = self.__time_decay_placeholder
 
         with tf.name_scope('data_unstack'):
             input_x_list = tf.unstack(input_x, axis=0)
-            input_t_list = tf.unstack(input_t, axis=0)
             input_x_list = input_x_list[0: time_index + 1]
-            input_t_list = input_t_list[0: time_index + 1]
 
         with tf.variable_scope('attention_para', reuse=tf.AUTO_REUSE):
             mutual = tf.get_variable(name='mutual', shape=[self.__x_depth, 1], dtype=tf.float64,
                                      initializer=self.__init_map['mutual_intensity'])
 
         with tf.name_scope('unnormal_weight'):
-            last_time = input_t_list[time_index][0]
             weight_list = []
 
             # calculate weight
             for i in range(0, time_index + 1):
-                with tf.name_scope('time_calc'):
-                    time_interval = tf.cast(last_time - input_t[i], dtype=tf.int64)
-                    time_onehot = tf.one_hot(time_interval, self.__time_decay_function_size, dtype=tf.float64)
-                with tf.name_scope('decay_calc'):
-                    time_decay = time_onehot * time_decay_placeholder
-                    time_decay = tf.reduce_sum(time_decay, axis=2)
                 with tf.name_scope('weight_calc'):
                     x_t_j = input_x_list[i]
                     single_intensity = tf.matmul(x_t_j, mi_placeholder)
                     single_intensity = tf.matmul(single_intensity, mutual)
                     # TODO 这一问题留待后期以合适的情况加入
-                    # * time_decay 暂时删除时间因素
+                    # time_decay 暂时删除时间因素
                 weight_list.append(single_intensity)
             unnormalized_weight = tf.convert_to_tensor(weight_list, dtype=tf.float64)
 
@@ -109,8 +97,7 @@ def unit_test():
 
     intensity_obj = intensity.Intensity(model_config)
     mutual_placeholder = intensity_obj.mutual_intensity_placeholder
-    time_decay = tf.placeholder('float64', [model_config.time_decay_size])
-    hawkes_attention = HawkesBasedAttentionLayer(model_config, mutual_placeholder, time_decay)
+    hawkes_attention = HawkesBasedAttentionLayer(model_config, mutual_placeholder)
 
     for time_stamp in range(0, model_config.max_time_stamp):
         mix_state = hawkes_attention(time_stamp, hidden_tensor, placeholder_x, placeholder_t, mutual_placeholder)

@@ -56,6 +56,7 @@ class PredictionLayer(object):
         self.__num_hidden = model_configuration.num_hidden
         self.__t_depth = model_configuration.input_t_depth
         self.__x_depth = model_configuration.input_x_depth
+        self.__pos_weight = model_configuration.pos_weight
 
     def __call__(self, **kwargs):
         """
@@ -121,7 +122,9 @@ class PredictionLayer(object):
             with tf.name_scope('c_loss'):
                 # we use the binary entropy loss function proposed in Large-scale Multi-label Text Classification -
                 # Revisiting Neural Networks, arxiv.org/pdf/1312.5419
-                c_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=c_label, logits=un_c_pred_list))
+                c_loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=c_label,
+                                                                                 logits=un_c_pred_list,
+                                                                                 pos_weight=self.__pos_weight))
             with tf.name_scope('r_loss'):
                 r_loss = tf.reduce_mean(tf.losses.mean_squared_error(labels=r_label, predictions=r_pred_list))
                 r_loss = tf.cast(r_loss, dtype=tf.float64)
@@ -140,7 +143,7 @@ def performance_summary(input_x, input_t, c_pred, r_pred, threshold):
     def __confusion_matrix(x, prediction, th):
         floor = tf.floor(prediction)
         ceil = tf.ceil(prediction)
-        pred_label = tf.cast(tf.where(prediction > th, floor, ceil), tf.bool)
+        pred_label = tf.cast(tf.where(prediction > th, ceil, floor), tf.bool)
         true_label = tf.cast(x, tf.bool)
 
         tpn = tf.reduce_sum(tf.cast(tf.logical_and(pred_label, true_label), dtype=tf.float64))
@@ -151,12 +154,17 @@ def performance_summary(input_x, input_t, c_pred, r_pred, threshold):
         return tpn, tnn, fpn, fnn
 
     with tf.name_scope('performance'):
+        with tf.name_scope('confusion_matrix'):
+            tp, tn, fp, fn = __confusion_matrix(input_x, c_pred, threshold)
+            tf.summary.scalar('tp', tp)
+            tf.summary.scalar('tn', tn)
+            tf.summary.scalar('fp', fp)
+            tf.summary.scalar('fn', fn)
         with tf.name_scope('macro_auc'):
             label = tf.reshape(input_x, [1, -1])
             pred = tf.reshape(c_pred, [1, -1])
             macro_auc = auc_eval.auc(labels=label, predictions=pred)
             tf.summary.scalar('macro_auc', tf.reduce_mean(macro_auc))
-
         with tf.name_scope('micro_auc'):
             label = tf.unstack(input_x, axis=2)
             pred = tf.unstack(c_pred, axis=2)
@@ -164,17 +172,6 @@ def performance_summary(input_x, input_t, c_pred, r_pred, threshold):
             for i in range(0, len(label)):
                 micro_auc += auc_eval.auc(labels=label[i], predictions=pred[i])
             tf.summary.scalar('micro_auc', micro_auc / len(label))
-
-        with tf.name_scope('confusion_matrix'):
-            tp, tn, fp, fn = __confusion_matrix(input_x, c_pred, threshold)
-        with tf.name_scope('one_error/top_1'):
-            pass
-        with tf.name_scope('top_5_coverage'):
-            pass
-        with tf.name_scope('top_10_coverage'):
-            pass
-        with tf.name_scope('coverage'):
-            pass
         with tf.name_scope('acc'):
             acc = (tp + tn) / (tp + tn + fp + fn)
             tf.summary.scalar('c_accuracy', acc)
@@ -206,9 +203,7 @@ def unit_test():
     revise_gru_rnn = revised_rnn.RevisedRNN(model_configuration=model_config)
     intensity_component = intensity.Intensity(model_config=model_config)
     mutual_intensity = intensity_component.mutual_intensity_placeholder
-    decay_function = tf.placeholder('float64', [model_config.time_decay_size])
     attention_model = attention_mechanism.HawkesBasedAttentionLayer(model_configuration=model_config,
-                                                                    decay_function_place_holder=decay_function,
                                                                     mutual_intensity_placeholder=mutual_intensity)
     attention_layer = AttentionMixLayer(model_configuration=model_config, revise_rnn=revise_gru_rnn,
                                         attention=attention_model)

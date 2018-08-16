@@ -33,7 +33,6 @@ class ProposedModel(object):
         placeholder_x = kwargs['placeholder_x']
         placeholder_t = kwargs['placeholder_t']
         mutual_intensity_placeholder = kwargs['mutual_intensity']
-        decay_function_place_holder = kwargs['decay_function']
 
         self.placeholder_x = placeholder_x
         self.placeholder_t = placeholder_t
@@ -43,8 +42,7 @@ class ProposedModel(object):
         revise_gru_rnn = revised_rnn.RevisedRNN(model_configuration=model_config)
         attention_model = \
             attention_mechanism.HawkesBasedAttentionLayer(model_configuration=model_config,
-                                                          mutual_intensity_placeholder=mutual_intensity_placeholder,
-                                                          decay_function_place_holder=decay_function_place_holder)
+                                                          mutual_intensity_placeholder=mutual_intensity_placeholder)
         attention_layer = prediction.AttentionMixLayer(model_configuration=model_config, revise_rnn=revise_gru_rnn,
                                                        attention=attention_model)
         prediction_layer = prediction.PredictionLayer(model_configuration=model_config)
@@ -68,8 +66,7 @@ class ProposedModel(object):
             tf.summary.scalar('sum_loss', self.loss)
 
         self.placeholder_mi = mutual_intensity_placeholder
-        self.placeholder_time_decay = decay_function_place_holder
-        return self.loss, c_pred_list, r_pred_list, self.placeholder_mi, decay_function_place_holder
+        return placeholder_x, placeholder_t, self.loss, c_pred_list, self.placeholder_mi
 
 
 def unit_test():

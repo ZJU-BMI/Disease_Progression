@@ -24,21 +24,19 @@ def build_model(model_config):
     with tf.name_scope('input'):
         placeholder_x = tf.placeholder('float64', [max_time_stamp, batch_size, x_depth])
         placeholder_t = tf.placeholder('float64', [max_time_stamp, batch_size, t_depth])
-        decay_function = tf.placeholder('float64', [model_config.time_decay_size])
         intensity = Intensity(model_config)
         mutual_intensity = intensity.mutual_intensity_placeholder
     model = ProposedModel(model_config=model_config)
 
-    loss, c_pred_list, r_pred_list, mi, time_decay = \
-        model(placeholder_x=placeholder_x, placeholder_t=placeholder_t,
-              mutual_intensity=mutual_intensity, decay_function=decay_function)
+    placeholder_x, placeholder_t, loss, c_pred_list, mi = \
+        model(placeholder_x=placeholder_x, placeholder_t=placeholder_t, mutual_intensity=mutual_intensity)
 
-    return placeholder_x, placeholder_t, loss, c_pred_list, r_pred_list, mi, time_decay
+    return placeholder_x, placeholder_t, loss, c_pred_list, mi
 
 
 def fine_tuning(train_config, node_list, data_object, summary_save_path, mutual_intensity_data, time_decay_data,
                 threshold):
-    placeholder_x, placeholder_t, loss, c_pred_list, r_pred_list, mi, time_decay = node_list
+    placeholder_x, placeholder_t, loss, c_pred_list, mi = node_list
 
     if train_config.optimizer == 'SGD':
         with tf.variable_scope('sgd', reuse=True):
@@ -84,34 +82,31 @@ def fine_tuning(train_config, node_list, data_object, summary_save_path, mutual_
                 train_x, train_t = data_object.get_train_next_batch()
                 max_time_stamp = len(train_x)
 
-                train_dict = {placeholder_x: train_x, placeholder_t: train_t, mi: mutual_intensity_data,
-                              time_decay: time_decay_data}
+                train_dict = {placeholder_x: train_x, placeholder_t: train_t, mi: mutual_intensity_data}
                 _ = sess.run([optimize_node], feed_dict=train_dict)
 
                 if j % 10 == 0:
-                    c_pred, r_pred, summary = sess.run([c_pred_list, r_pred_list, merged_summary], feed_dict=train_dict)
+                    c_pred, summary = sess.run([c_pred_list, merged_summary], feed_dict=train_dict)
                     train_summary.add_summary(summary, i * batch_count + j)
-                    metric_result = pm.performance_measure(c_pred, r_pred, train_x[1:max_time_stamp],
-                                                           train_t[1:max_time_stamp], max_time_stamp - 1, threshold)
+                    metric_result = pm.performance_measure(c_pred, train_x[1:max_time_stamp], max_time_stamp - 1,
+                                                           threshold)
                     train_metric_list.append([i, j, metric_result])
 
                 # record metadata
                 if i % 4 == 0 and j == 0:
                     run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                     run_metadata = tf.RunMetadata()
-                    _, _, _ = sess.run([c_pred_list, r_pred_list, merged_summary],
-                                       feed_dict=train_dict,
-                                       options=run_options,
-                                       run_metadata=run_metadata)
+                    _, _ = sess.run([c_pred_list, merged_summary],
+                                    feed_dict=train_dict,
+                                    options=run_options,
+                                    run_metadata=run_metadata)
                     train_summary.add_run_metadata(run_metadata, 'step%d' % i)
 
             test_x, test_t = data_object.get_test_data()
             max_time_stamp = len(test_x)
-            test_dict = {placeholder_x: test_x, placeholder_t: test_t, mi: mutual_intensity_data,
-                         time_decay: time_decay_data}
-            c_pred, r_pred, summary = sess.run([c_pred_list, r_pred_list, merged_summary], feed_dict=test_dict)
-            metric_result = pm.performance_measure(c_pred, r_pred, test_x[1:max_time_stamp], test_t[1:max_time_stamp],
-                                                   max_time_stamp - 1, threshold)
+            test_dict = {placeholder_x: test_x, placeholder_t: test_t, mi: mutual_intensity_data, }
+            c_pred, summary = sess.run([c_pred_list, merged_summary], feed_dict=test_dict)
+            metric_result = pm.performance_measure(c_pred, test_x[1:max_time_stamp], max_time_stamp - 1, threshold)
             test_metric_list.append([i, None, metric_result])
             test_summary.add_summary(summary, i * batch_count)
 
@@ -131,11 +126,11 @@ def write_meta_data(train_meta, model_meta, path):
 
 def configuration_set():
     # fixed model parameters
-    x_depth = 110
+    x_depth = 100
     t_depth = 1
     max_time_stamp = 5
     cell_type = 'revised_gru'
-    c_r_ratio = 0.01
+    c_r_ratio = 0
     activation = 'tanh'
     init_map = dict()
     init_map['gate_weight'] = tf.contrib.layers.xavier_initializer()
@@ -154,15 +149,17 @@ def configuration_set():
 
     # fixed train parameters
     time = datetime.datetime.now().strftime("%H%M%S")
-    root_path = os.path.abspath('..\\..\\..') + '\\model_evaluate\\Case_1\\'
+    root_path = os.path.abspath('..\\..\\..') + '\\model_evaluate\\Case_80_20\\'
     optimizer = 'SGD'
-    mutual_intensity_path = os.path.join(root_path, 'mutual_intensity.csv')
-    base_intensity_path = os.path.join(root_path, 'base_intensity.csv')
-    decay_path = os.path.join(root_path, 'decay_function.csv')
+    mutual_intensity_path = os.path.join(root_path,
+                                         'fourier_diagnosis_80_procedure_20_iteration_10_slot_1000_mutual_intensity'
+                                         '.csv')
     # the parameter only effective when using SGD
     save_path = root_path + time + "\\"
-    x_path = os.path.join(root_path, '20180815133741_110_x.npy')
-    t_path = os.path.join(root_path, '20180815133741_110_t.npy')
+
+    x_path = os.path.join(root_path, '20180816163944_100_x.npy')
+    t_path = os.path.join(root_path, '20180816163944_100_t.npy')
+
     encoding = 'utf-8-sig'
 
     # random search parameter
@@ -173,20 +170,22 @@ def configuration_set():
     zero_state = np.zeros([num_hidden, ])
     learning_rate = 10 ** random.uniform(-1, 0)
     decay_step = 10000
-    epoch = 100
-    threshold_candidate = [0.2, 0.3, 0.4, 0.5]
+    epoch = 10
+    threshold_candidate = [0.6, 0.7, 0.8, 0.9]
     threshold = threshold_candidate[random.randint(0, 3)]
+    pos_weight_candidate = [5, 10, 15, 20, 25, 30]
+    pos_weight = pos_weight_candidate[random.randint(0, 5)]
+    pos_weight = 0.1
 
     model_config = config.ModelConfiguration(x_depth=x_depth, t_depth=t_depth, max_time_stamp=max_time_stamp,
                                              num_hidden=num_hidden, cell_type=cell_type, c_r_ratio=c_r_ratio,
                                              activation=activation, zero_state=zero_state, init_map=init_map,
-                                             batch_size=model_batch_size, threshold=threshold)
+                                             batch_size=model_batch_size, threshold=threshold, pos_weight=pos_weight)
     train_config = config.TrainingConfiguration(optimizer=optimizer,
                                                 save_path=save_path, actual_batch_size=actual_batch_size, epoch=epoch,
                                                 decay_step=decay_step, learning_rate=learning_rate,
                                                 mutual_intensity_path=mutual_intensity_path,
-                                                base_intensity_path=base_intensity_path, file_encoding=encoding,
-                                                t_path=t_path, x_path=x_path, decay_path=decay_path)
+                                                file_encoding=encoding, t_path=t_path, x_path=x_path)
     return train_config, model_config
 
 
@@ -228,7 +227,6 @@ def main():
         with new_graph.as_default():
             train_config, model_config = configuration_set()
             threshold = model_config.threshold
-            time_decay_data = read_time_decay(train_config.decay_path, model_config.time_decay_size)
             data_object = read_data.LoadData(train_config=train_config, model_config=model_config)
             mutual_intensity_data = \
                 Intensity.read_mutual_intensity_data(encoding=train_config.encoding,
@@ -237,7 +235,7 @@ def main():
             key_node_list = build_model(model_config)
             train_metric_list, test_metric_list = fine_tuning(train_config, key_node_list, data_object,
                                                               train_config.save_path, mutual_intensity_data,
-                                                              time_decay_data, threshold)
+                                                              threshold, threshold=0.5)
             pm.save_result(train_config.save_path, 'train_metric.csv', train_metric_list)
             pm.save_result(train_config.save_path, 'test_metric.csv', test_metric_list)
             write_meta_data(train_config.meta_data, model_config.meta_data, train_config.save_path)

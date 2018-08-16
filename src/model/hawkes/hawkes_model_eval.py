@@ -176,9 +176,9 @@ def hawkes_eval():
     name_prefix_temp = '{}_diagnosis_{}_procedure_{}_iteration_{}_slot_{}_'
 
     # Experiment
-    for diagnosis_reserve in [40]:
-        for procedure_reserve in [0]:
-            for iteration in [10, 15, 20, 25, 30]:
+    for diagnosis_reserve in [80]:
+        for procedure_reserve in [20]:
+            for iteration in [10]:
                 train_data, test_data, name_index_map = \
                     hawkes_load_data(source_file_path, source_file_name, diagnosis_reserve, procedure_reserve)
 

@@ -7,7 +7,7 @@ import tensorflow as tf
 
 
 class ModelConfiguration(object):
-    def __init__(self, x_depth, max_time_stamp, num_hidden, cell_type, init_map, batch_size,
+    def __init__(self, x_depth, max_time_stamp, num_hidden, cell_type, init_map, batch_size, pos_weight,
                  c_r_ratio, activation, zero_state, t_depth, threshold, time_decay_size=10000):
         """
         :param x_depth: the dimension of x
@@ -32,6 +32,7 @@ class ModelConfiguration(object):
         self.max_time_stamp = max_time_stamp
         # Network Parameter
         self.num_hidden = num_hidden
+        self.pos_weight = pos_weight
         self.cell_type = cell_type
         self.activation = activation
         self.zero_state = zero_state
@@ -54,6 +55,7 @@ class ModelConfiguration(object):
         meta_data['num_hidden'] = self.num_hidden
         meta_data['cell_type'] = self.cell_type
         meta_data['activation'] = self.activation
+        meta_data['pos_weight'] = self.pos_weight
         meta_data['batch_size'] = self.batch_size
         meta_data['zero_state'] = self.zero_state
         meta_data['init_map'] = self.init_map
@@ -67,7 +69,7 @@ class ModelConfiguration(object):
 
 class TrainingConfiguration(object):
     def __init__(self, optimizer, learning_rate, save_path, actual_batch_size, decay_step, epoch,
-                 mutual_intensity_path, base_intensity_path, file_encoding, x_path, t_path, decay_path):
+                 mutual_intensity_path, file_encoding, x_path, t_path):
         """
         :param optimizer: the Optimizer Object of neural network
         :param learning_rate: initial learn rate
@@ -77,9 +79,7 @@ class TrainingConfiguration(object):
         :param actual_batch_size: the batch size of data
         :param x_path: the path (including file name) of input x
         :param t_path: the path (including file name) of input t
-        :param decay_path: the path (including file name) of discrete time decay function
         :param mutual_intensity_path: the path (including file name) of mutual intensity
-        :param base_intensity_path: the path (including file name) of base intensity
         :param file_encoding: the encoding of saved file
 
         """
@@ -90,11 +90,9 @@ class TrainingConfiguration(object):
         self.actual_batch_size = actual_batch_size
         self.epoch = epoch
         self.mutual_intensity_path = mutual_intensity_path
-        self.base_intensity_path = base_intensity_path
         self.encoding = file_encoding
         self.x_path = x_path
         self.t_path = t_path
-        self.decay_path = decay_path
         self.meta_data = self.set_meta_data()
 
     def set_meta_data(self):
@@ -103,8 +101,6 @@ class TrainingConfiguration(object):
         meta_data['decay_step'] = self.decay_step
         meta_data['optimizer'] = self.optimizer
         meta_data['mutual_intensity_path'] = self.mutual_intensity_path
-        meta_data['base_intensity_path'] = self.base_intensity_path
-        meta_data['decay_path'] = self.decay_path
         meta_data['save_path'] = self.save_path
         meta_data['actual_batch_size'] = self.actual_batch_size
         meta_data['epoch'] = self.epoch
@@ -147,33 +143,29 @@ def validate_configuration_set():
     now_time = datetime.datetime.now().strftime('%H%M%S')
     all_path = os.path.abspath('..\\..\\..') + '\\model_evaluate\\ValidationTest\\'
     mutual_intensity_path = os.path.join(all_path, 'mutual_intensity.csv')
-    base_intensity_path = os.path.join(all_path, 'base_intensity.csv')
     x_path = os.path.join(all_path, 'validation_x.npy')
     t_path = os.path.join(all_path, 'validation_t.npy')
-    decay_path = os.path.join(all_path, 'validation_decay_function.csv')
     save_path = all_path + now_time + "\\"
     os.makedirs(save_path)
     encoding = 'utf-8-sig'
-    epoch = 3
+    epoch = 100
     optimizer = 'default'
 
     # random search train parameter
-    learning_rate_decay = 0.001
     decay_step = 100
     learning_rate = 0.001
-    actual_batch_size = 16
+    actual_batch_size = 128
 
     model_config = ModelConfiguration(x_depth=x_depth, t_depth=t_depth, max_time_stamp=max_time_stamp,
                                       num_hidden=num_hidden, cell_type=cell_type, c_r_ratio=c_r_ratio,
                                       activation=activation, zero_state=zero_state,
                                       init_map=init_map, batch_size=model_batch_size,
-                                      time_decay_size=time_decay_size, threshold=threshold, )
+                                      time_decay_size=time_decay_size, threshold=threshold, pos_weight=5)
     train_config = TrainingConfiguration(optimizer=optimizer,
                                          save_path=save_path, actual_batch_size=actual_batch_size, epoch=epoch,
                                          decay_step=decay_step, learning_rate=learning_rate,
                                          mutual_intensity_path=mutual_intensity_path,
-                                         base_intensity_path=base_intensity_path, file_encoding=encoding,
-                                         t_path=t_path, x_path=x_path, decay_path=decay_path)
+                                         file_encoding=encoding, t_path=t_path, x_path=x_path)
 
     return train_config, model_config
 
