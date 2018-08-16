@@ -136,16 +136,6 @@ def performance_summary(input_x, input_t, c_pred, r_pred, threshold):
     # performance metrics are obtained based on A Review on Multi-Label Learning Algorithms,
     #  Zhang et al, TKDE, 2014
     # size [time_stamp, batch_size, depth]
-    """
-    def __top_k_coverage(x, prediction, k):
-        coverage_sum = 0
-        _, indices = tf.nn.top_k(prediction, k=k)
-        indices_shape = indices.shape
-        s = x[indices_shape]
-        single_pred = tf.ceil(prediction[indices])
-
-        return coverage_sum/(k*len(x))
-    """
 
     def __confusion_matrix(x, prediction, th):
         floor = tf.floor(prediction)

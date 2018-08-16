@@ -82,7 +82,9 @@ class HawkesBasedAttentionLayer(object):
                 with tf.name_scope('weight_calc'):
                     x_t_j = input_x_list[i]
                     single_intensity = tf.matmul(x_t_j, mi_placeholder)
-                    single_intensity = tf.matmul(single_intensity, mutual) * time_decay
+                    single_intensity = tf.matmul(single_intensity, mutual)
+                    # TODO 这一问题留待后期以合适的情况加入
+                    # * time_decay 暂时删除时间因素
                 weight_list.append(single_intensity)
             unnormalized_weight = tf.convert_to_tensor(weight_list, dtype=tf.float64)
 
