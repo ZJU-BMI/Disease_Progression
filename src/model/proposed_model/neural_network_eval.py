@@ -5,6 +5,7 @@ import os
 import random
 
 import numpy as np
+import sklearn
 import tensorflow as tf
 
 import performance_metrics as pm
@@ -34,8 +35,7 @@ def build_model(model_config):
     return placeholder_x, placeholder_t, loss, c_pred_list, mi
 
 
-def fine_tuning(train_config, node_list, data_object, summary_save_path, mutual_intensity_data, time_decay_data,
-                threshold):
+def fine_tuning(train_config, node_list, data_object, summary_save_path, mutual_intensity_data, threshold):
     placeholder_x, placeholder_t, loss, c_pred_list, mi = node_list
 
     if train_config.optimizer == 'SGD':
@@ -113,7 +113,16 @@ def fine_tuning(train_config, node_list, data_object, summary_save_path, mutual_
             if i == train_config.epoch / 2 or i == train_config.epoch - 1:
                 saver.save(sess=sess, save_path=os.path.join(model_path, 'model'), global_step=i)
 
-    return train_metric_list, test_metric_list
+        # plot final roc_curve
+        test_x, test_t = data_object.get_test_data()
+        max_time_stamp = len(test_x) - 1
+        test_dict = {placeholder_x: test_x, placeholder_t: test_t, mi: mutual_intensity_data}
+        c_pred = sess.run([c_pred_list], feed_dict=test_dict)
+        c_pred = np.reshape(c_pred, [1, -1])
+        test_x = np.reshape(test_x[1:max_time_stamp], [1, -1])
+        roc_curve = sklearn.metrics.roc_curve(test_x, c_pred)
+
+    return train_metric_list, test_metric_list, roc_curve
 
 
 def write_meta_data(train_meta, model_meta, path):
@@ -165,17 +174,16 @@ def configuration_set():
     # random search parameter
     # batch_candidate = [64, 128, 256, 512]
     actual_batch_size = 128
-    num_hidden_candidate = [16, 32, 64]
+    num_hidden_candidate = [32, 64, 128]
     num_hidden = num_hidden_candidate[random.randint(0, 2)]
     zero_state = np.zeros([num_hidden, ])
     learning_rate = 10 ** random.uniform(-1, 0)
     decay_step = 10000
-    epoch = 10
+    epoch = 200
     threshold_candidate = [0.6, 0.7, 0.8, 0.9]
     threshold = threshold_candidate[random.randint(0, 3)]
     pos_weight_candidate = [5, 10, 15, 20, 25, 30]
     pos_weight = pos_weight_candidate[random.randint(0, 5)]
-    pos_weight = 0.1
 
     model_config = config.ModelConfiguration(x_depth=x_depth, t_depth=t_depth, max_time_stamp=max_time_stamp,
                                              num_hidden=num_hidden, cell_type=cell_type, c_r_ratio=c_r_ratio,
@@ -209,7 +217,6 @@ def validation_test():
         with new_graph.as_default():
             train_config, model_config = config.validate_configuration_set()
             threshold = model_config.threshold
-            time_decay_data = read_time_decay(train_config.decay_path, model_config.time_decay_size)
             data_object = read_data.LoadData(train_config=train_config, model_config=model_config)
             key_node_list = build_model(model_config)
             mutual_intensity_data = \
@@ -217,7 +224,7 @@ def validation_test():
                                                      mutual_intensity_path=train_config.mutual_intensity_path,
                                                      size=model_config.input_x_depth)
             fine_tuning(train_config, key_node_list, data_object, train_config.save_path, mutual_intensity_data,
-                        time_decay_data, threshold)
+                        threshold)
 
 
 def main():
@@ -233,11 +240,12 @@ def main():
                                                      mutual_intensity_path=train_config.mutual_intensity_path,
                                                      size=model_config.input_x_depth)
             key_node_list = build_model(model_config)
-            train_metric_list, test_metric_list = fine_tuning(train_config, key_node_list, data_object,
-                                                              train_config.save_path, mutual_intensity_data,
-                                                              threshold, threshold=0.5)
+            train_metric_list, test_metric_list, roc = fine_tuning(train_config, key_node_list, data_object,
+                                                                   train_config.save_path, mutual_intensity_data,
+                                                                   threshold)
             pm.save_result(train_config.save_path, 'train_metric.csv', train_metric_list)
             pm.save_result(train_config.save_path, 'test_metric.csv', test_metric_list)
+            pm.save_roc(train_config.save_path, 'roc.csv', roc)
             write_meta_data(train_config.meta_data, model_config.meta_data, train_config.save_path)
 
 

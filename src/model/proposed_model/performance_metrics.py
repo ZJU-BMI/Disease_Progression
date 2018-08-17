@@ -73,6 +73,7 @@ def coverage_day(c_pred, c_label, time_stamp):
     label = c_label[time_stamp]
 
     coverage_sum = 0
+    effective_data = 0
     for i in range(len(pred)):
         # i 0-batch_size:
         single_pred = pred[i]
@@ -85,8 +86,10 @@ def coverage_day(c_pred, c_label, time_stamp):
         for j in range(len(pair_list)):
             if pair_list[j][1] == 1:
                 last_index = j
+        if last_index > 0:
+            effective_data += 1
         coverage_sum += last_index
-    return coverage_sum / len(label)
+    return coverage_sum / effective_data
 
 
 def top_k_coverage(c_pred, c_label, k):
@@ -103,6 +106,7 @@ def top_k_coverage_day(c_pred, c_label, time_stamp, k):
     pred = c_pred[time_stamp]
     label = c_label[time_stamp]
     coverage_sum = 0
+    effective_data = 0
     for i in range(len(pred)):
         # i 0-batch_size:
         single_pred = pred[i]
@@ -114,7 +118,14 @@ def top_k_coverage_day(c_pred, c_label, time_stamp, k):
         for j in range(k):
             if pair_list[j][1] == 1:
                 coverage_sum += 1
-    return coverage_sum / len(label)
+
+        effective_flag = False
+        for j in range(len(pair_list)):
+            if pair_list[j][1] == 1:
+                effective_flag = True
+        if effective_flag:
+            effective_data += 1
+    return coverage_sum / effective_data
 
 
 def save_result(path, file_name, data):
@@ -147,6 +158,17 @@ def save_result(path, file_name, data):
                          five_coverage, ten_coverage, fifteen_coverage]
         matrix_to_write.append(single_result)
 
+    with open(os.path.join(path, file_name), 'w', encoding='utf-8-sig', newline="") as file:
+        csv_writer = csv.writer(file)
+        csv_writer.writerows(matrix_to_write)
+
+
+def save_roc(path, file_name, data):
+    fpr, tpr, threshold = data
+    matrix_to_write = list()
+    matrix_to_write.append(['fpr', 'tpr', 'threshold'])
+    for i, _ in enumerate(fpr):
+        matrix_to_write.append([fpr, tpr, threshold])
     with open(os.path.join(path, file_name), 'w', encoding='utf-8-sig', newline="") as file:
         csv_writer = csv.writer(file)
         csv_writer.writerows(matrix_to_write)
