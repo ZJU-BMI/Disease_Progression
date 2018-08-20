@@ -23,14 +23,13 @@ class HawkesBasedAttentionLayer(object):
         self.__mutual_intensity_placeholder = mutual_intensity_placeholder
         self.__init_argument_validation()
 
-    def __call__(self, time_index, hidden_tensor, input_x, input_t, mutual_intensity):
+    def __call__(self, time_index, hidden_tensor, input_x, mutual_intensity):
         """
         get the mixed hidden state under the process of attention mechanism
 
         :param time_index: the time index, the first hidden state (not zero state) will be defined as time_index=0
         :param hidden_tensor: a hidden state tensor with size, [time_stamp, batch_size, hidden_state]
         :param input_x: tensor with size [max_time_stamp, batch_size, x_depth]
-        :param input_t: tensor with size [max_time_stamp, batch_size, t_depth]
         :param mutual_intensity: a tensor with size [x_depth(event count), x_depth]
         :return: a mix hidden state at predefined time_index
         """
@@ -92,7 +91,6 @@ def unit_test():
 
     batch_size = model_config.batch_size
     placeholder_x = tf.placeholder('float64', [model_config.max_time_stamp, batch_size, model_config.input_x_depth])
-    placeholder_t = tf.placeholder('float64', [model_config.max_time_stamp, batch_size, model_config.input_t_depth])
     hidden_tensor = tf.placeholder('float64', [model_config.max_time_stamp, batch_size, model_config.num_hidden])
 
     intensity_obj = intensity.Intensity(model_config)
@@ -100,7 +98,7 @@ def unit_test():
     hawkes_attention = HawkesBasedAttentionLayer(model_config, mutual_placeholder)
 
     for time_stamp in range(0, model_config.max_time_stamp):
-        mix_state = hawkes_attention(time_stamp, hidden_tensor, placeholder_x, placeholder_t, mutual_placeholder)
+        mix_state = hawkes_attention(time_stamp, hidden_tensor, placeholder_x, mutual_placeholder)
         print(mix_state)
 
 

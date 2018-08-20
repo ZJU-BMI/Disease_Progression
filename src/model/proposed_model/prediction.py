@@ -43,7 +43,7 @@ class AttentionMixLayer(object):
         with tf.name_scope('attention'):
             for time_stamp in range(0, self.__max_time_stamp):
                 with tf.name_scope('mix_state'):
-                    mix_state = self.__attention(time_stamp, hidden_tensor, input_x, input_t, mutual_intensity)
+                    mix_state = self.__attention(time_stamp, hidden_tensor, input_x, mutual_intensity)
                     mix_hidden_state_list.append(mix_state)
             mix_hidden_state_list = tf.convert_to_tensor(mix_hidden_state_list, dtype=tf.float64,
                                                          name='attention_states')

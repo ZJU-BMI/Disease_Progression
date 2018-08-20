@@ -59,7 +59,10 @@ class RevisedRNN(object):
             for i in range(0, self.__time_stamp):
                 with tf.name_scope('state_' + str(i)):
                     step_i_x = input_x[i]
-                    step_i_t = input_t[i]
+                    if i == 0:
+                        step_i_t = input_t[i] - input_t[i - 1]
+                    else:
+                        step_i_t = input_t[i]
                     state = self.rnn_cell(input_x=step_i_x, input_t=step_i_t, previous_sate=state)
                 states_list.append(state)
             states_tensor = tf.convert_to_tensor(states_list, dtype=tf.float64)
